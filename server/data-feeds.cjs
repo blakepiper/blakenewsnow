@@ -27,6 +27,15 @@ const RSS_FEEDS = {
     { name: 'NY Times', url: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
     { name: 'Reuters', url: 'https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best' },
     { name: 'Associated Press', url: 'https://rsshub.app/apnews/topics/apf-topnews' },
+    { name: 'Washington Post', url: 'https://feeds.washingtonpost.com/rss/national' },
+    { name: 'CNN', url: 'http://rss.cnn.com/rss/cnn_topstories.rss' },
+    { name: 'Fox News', url: 'https://moxie.foxnews.com/google-publisher/us.xml' },
+    { name: 'Politico', url: 'https://rss.politico.com/politics-news.xml' },
+    { name: 'The Intercept', url: 'https://theintercept.com/feed/' },
+    { name: 'ProPublica', url: 'http://feeds.propublica.org/propublica/main' },
+    { name: 'Foreign Policy', url: 'https://foreignpolicy.com/feed/' },
+    { name: 'Breitbart', url: 'https://feeds.feedburner.com/breitbart' },
+    { name: 'Daily Wire', url: 'https://www.dailywire.com/rss.xml' },
   ],
   tech: [
     { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
@@ -64,6 +73,7 @@ const cache = {
   predictions: { data: null, timestamp: 0 },
   reddit: { data: null, timestamp: 0 },
   hackernews: { data: null, timestamp: 0 },
+  fourchan: { data: null, timestamp: 0 },
   geocode: {},  // zip -> {lat, lon} cache
 };
 
@@ -78,13 +88,18 @@ const CACHE_TTL = {
   predictions: 60 * 1000, // 1 minute
   reddit: 2 * 60 * 1000,  // 2 minutes
   hackernews: 2 * 60 * 1000, // 2 minutes
+  fourchan: 2 * 60 * 1000,   // 2 minutes
 };
 
 // Default location (Alexandria, VA - zip 22314)
 const DEFAULT_ZIP = '22314';
 
 function isCacheValid(key) {
-  return cache[key].data && (Date.now() - cache[key].timestamp) < CACHE_TTL[key];
+  const entry = cache[key];
+  if (!entry.data || (Date.now() - entry.timestamp) >= CACHE_TTL[key]) return false;
+  // Don't treat empty arrays as valid cache
+  if (Array.isArray(entry.data) && entry.data.length === 0) return false;
+  return true;
 }
 
 // ============================================
@@ -340,8 +355,12 @@ async function fetchMarkets() {
     { symbol: 'AAPL', name: 'Apple' },
     { symbol: 'MSFT', name: 'Microsoft' },
     { symbol: 'GOOGL', name: 'Alphabet' },
+    { symbol: 'AMZN', name: 'Amazon' },
     { symbol: 'TSLA', name: 'Tesla' },
     { symbol: 'META', name: 'Meta' },
+    { symbol: 'AMD', name: 'AMD' },
+    { symbol: 'NFLX', name: 'Netflix' },
+    { symbol: 'CRM', name: 'Salesforce' },
   ];
 
   const results = {
@@ -395,7 +414,6 @@ async function fetchMarkets() {
 
   // Sort movers by absolute change percent
   results.movers.sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
-  results.movers = results.movers.slice(0, 4);
 
   cache.markets = { data: results, timestamp: Date.now() };
   return results;
@@ -443,7 +461,7 @@ async function fetchCrypto() {
 
   console.log('[DATA] Fetching crypto...');
 
-  const coins = ['bitcoin', 'ethereum', 'solana', 'dogecoin'];
+  const coins = ['bitcoin', 'ethereum', 'solana', 'dogecoin', 'cardano', 'ripple'];
   const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coins.join(',')}&vs_currencies=usd&include_24hr_change=true`;
 
   try {
@@ -458,6 +476,8 @@ async function fetchCrypto() {
       { symbol: 'ETH', name: 'Ethereum', ...formatCoinGecko(json.ethereum) },
       { symbol: 'SOL', name: 'Solana', ...formatCoinGecko(json.solana) },
       { symbol: 'DOGE', name: 'Dogecoin', ...formatCoinGecko(json.dogecoin) },
+      { symbol: 'ADA', name: 'Cardano', ...formatCoinGecko(json.cardano) },
+      { symbol: 'XRP', name: 'Ripple', ...formatCoinGecko(json.ripple) },
     ].filter(c => c.price);
 
     cache.crypto = { data: result, timestamp: Date.now() };
@@ -760,11 +780,7 @@ async function fetchWeather(zip = DEFAULT_ZIP) {
 // ============================================
 // Polymarket Predictions
 // ============================================
-async function fetchPredictions() {
-  if (isCacheValid('predictions')) {
-    return cache.predictions.data;
-  }
-
+async function fetchPolymarketDirect() {
   console.log('[DATA] Fetching predictions from Polymarket...');
 
   const url = 'https://gamma-api.polymarket.com/markets?limit=50&active=true&closed=false&order=volume24hr&ascending=false';
@@ -776,8 +792,7 @@ async function fetchPredictions() {
 
     const markets = JSON.parse(data);
 
-    // Filter and format markets
-    const result = markets
+    return markets
       .filter(m => {
         // Skip sports betting, focus on news-worthy markets
         const q = m.question?.toLowerCase() || '';
@@ -788,7 +803,7 @@ async function fetchPredictions() {
                         q.includes('hockey') || q.includes('f1') || q.includes('formula') ||
                         q.includes('nascar') || q.includes('pga') || q.includes('boxing') ||
                         q.includes('mma') || q.includes('wrestling') || q.includes('olympics') ||
-                        q.includes(' vs ') || q.includes(' vs. ') ||  // "Team A vs Team B" pattern
+                        q.includes(' vs ') || q.includes(' vs. ') ||
                         q.includes('warriors') || q.includes('lakers') || q.includes('celtics') ||
                         q.includes('cavaliers') || q.includes('magic') || q.includes('timberwolves') ||
                         q.includes('knicks') || q.includes('bulls') || q.includes('heat') ||
@@ -799,41 +814,153 @@ async function fetchPredictions() {
                         q.includes('super bowl') || q.includes('world series') || q.includes('stanley cup') ||
                         q.includes('march madness') || q.includes('playoffs') || q.includes('championship');
         if (isSports) return false;
-        if (m.volume24hr < 10000) return false; // Min $10k 24h volume
+        if (m.volume24hr < 5000) return false; // Min $5k 24h volume
 
-        // Filter out near-certain outcomes (boring)
         const prices = JSON.parse(m.outcomePrices || '[0.5, 0.5]');
         const yesPrice = parseFloat(prices[0]);
-        if (yesPrice < 0.02 || yesPrice > 0.98) return false; // Skip 0-2% or 98-100%
+        if (yesPrice < 0.02 || yesPrice > 0.98) return false;
 
         return true;
       })
-      .slice(0, 18)
+      .slice(0, 25)
       .map(m => {
         const outcomes = JSON.parse(m.outcomes || '["Yes", "No"]');
         const prices = JSON.parse(m.outcomePrices || '[0.5, 0.5]');
 
-        // Find the "Yes" price (usually first outcome)
         const yesIndex = outcomes.findIndex(o => o.toLowerCase() === 'yes');
         const yesPrice = yesIndex >= 0 ? parseFloat(prices[yesIndex]) : parseFloat(prices[0]);
 
         return {
           id: m.id,
           question: truncateQuestion(m.question),
-          yesPrice: Math.round(yesPrice * 100), // Convert to percentage
+          yesPrice: Math.round(yesPrice * 100),
           volume24h: m.volume24hr,
           volumeDisplay: formatVolume(m.volume24hr),
           slug: m.slug,
           category: categorizeMarket(m.question),
         };
       });
-
-    cache.predictions = { data: result, timestamp: Date.now() };
-    return result;
   } catch (err) {
     console.error('[POLYMARKET]', err.message);
-    return cache.predictions.data || [];
+    return [];
   }
+}
+
+async function fetchPizzintWatch() {
+  console.log('[DATA] Fetching pizzint.watch geopolitical predictions...');
+
+  try {
+    const { data } = await fetch('https://pizzint.watch', { timeout: 10000 });
+
+    // Extract initialDoomsdayData from Next.js RSC payload
+    // In the HTML the JSON is double-escaped: initialDoomsdayData\\\":{\\\"markets\\\":[...]}
+    const idx = data.indexOf('initialDoomsdayData');
+    if (idx < 0) {
+      console.log('[PIZZINT] Could not find initialDoomsdayData in page');
+      return [];
+    }
+
+    // Extract from the opening { after initialDoomsdayData\\\":
+    // Find the markets array by looking for the pattern and matching brackets
+    const dataSlice = data.substring(idx);
+    const marketsStart = dataSlice.indexOf('markets');
+    if (marketsStart < 0) {
+      console.log('[PIZZINT] Could not find markets array');
+      return [];
+    }
+
+    // Find the opening [ after "markets\\":
+    const arrStart = dataSlice.indexOf('[', marketsStart);
+    if (arrStart < 0) {
+      console.log('[PIZZINT] Could not find markets array start');
+      return [];
+    }
+
+    // Match brackets to find the end of the array
+    let depth = 0;
+    let arrEnd = -1;
+    for (let i = arrStart; i < dataSlice.length; i++) {
+      if (dataSlice[i] === '[') depth++;
+      else if (dataSlice[i] === ']') {
+        depth--;
+        if (depth === 0) { arrEnd = i + 1; break; }
+      }
+    }
+    if (arrEnd < 0) {
+      console.log('[PIZZINT] Could not find markets array end');
+      return [];
+    }
+
+    // Unescape the JSON-escaped string
+    const rawArray = dataSlice.substring(arrStart, arrEnd).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    let markets;
+    try {
+      markets = JSON.parse(rawArray);
+    } catch (parseErr) {
+      console.error('[PIZZINT] JSON parse failed:', parseErr.message);
+      return [];
+    }
+    const now = Date.now();
+
+    return markets
+      .filter(m => {
+        if (m.endDate && new Date(m.endDate).getTime() < now) return false;
+        return m.label || m.question || m.title;
+      })
+      .map(m => {
+        const question = m.label || m.question || m.title || '';
+        const yesPrice = m.price != null
+          ? Math.round(m.price * 100)
+          : m.probability != null
+            ? Math.round(m.probability * 100)
+            : 50;
+
+        return {
+          id: `pizzint-${m.id || m.slug || crypto.createHash('md5').update(question).digest('hex').slice(0, 10)}`,
+          question: truncateQuestion(question),
+          yesPrice,
+          volume24h: m.volume24hr || m.volume || 0,
+          volumeDisplay: formatVolume(m.volume24hr || m.volume || 0),
+          slug: m.slug || null,
+          category: 'geopolitical',
+        };
+      });
+  } catch (err) {
+    console.error('[PIZZINT]', err.message);
+    return [];
+  }
+}
+
+async function fetchPredictions() {
+  if (isCacheValid('predictions')) {
+    return cache.predictions.data;
+  }
+
+  const [polymarket, pizzint] = await Promise.all([
+    fetchPolymarketDirect(),
+    fetchPizzintWatch(),
+  ]);
+
+  // Deduplicate by slug (pizzint items may overlap with Polymarket)
+  const seenSlugs = new Set();
+  const merged = [];
+
+  for (const item of polymarket) {
+    if (item.slug) seenSlugs.add(item.slug);
+    merged.push(item);
+  }
+
+  for (const item of pizzint) {
+    if (item.slug && seenSlugs.has(item.slug)) continue;
+    merged.push(item);
+  }
+
+  const result = merged.slice(0, 30);
+
+  if (result.length > 0) {
+    cache.predictions = { data: result, timestamp: Date.now() };
+  }
+  return result;
 }
 
 function truncateQuestion(q) {
@@ -941,22 +1068,27 @@ async function fetchReddit() {
 
   const results = [];
 
-  for (const subreddit of REDDIT_SUBREDDITS) {
-    try {
-      const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=15`;
+  // Fetch all subreddits in parallel
+  const subredditResults = await Promise.allSettled(
+    REDDIT_SUBREDDITS.map(async (subreddit) => {
+      const url = `https://old.reddit.com/r/${subreddit}/hot.json?limit=15&raw_json=1`;
       const { data } = await fetch(url, {
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        timeout: 10000,
       });
 
       const json = JSON.parse(data);
       const posts = json.data?.children || [];
+      const items = [];
 
       for (const post of posts) {
         const d = post.data;
-        // Skip stickied posts and self posts without much content
         if (d.stickied) continue;
 
-        results.push({
+        items.push({
           id: d.id,
           title: d.title,
           source: `r/${subreddit}`,
@@ -970,8 +1102,17 @@ async function fetchReddit() {
           thumbnail: d.thumbnail && d.thumbnail.startsWith('http') ? d.thumbnail : null,
         });
       }
-    } catch (err) {
-      console.error(`[REDDIT] r/${subreddit} failed:`, err.message);
+      console.log(`[REDDIT] r/${subreddit}: ${items.length} posts`);
+      return items;
+    })
+  );
+
+  for (let i = 0; i < subredditResults.length; i++) {
+    const result = subredditResults[i];
+    if (result.status === 'fulfilled') {
+      results.push(...result.value);
+    } else {
+      console.error(`[REDDIT] r/${REDDIT_SUBREDDITS[i]} failed:`, result.reason?.message || result.reason);
     }
   }
 
@@ -987,7 +1128,9 @@ async function fetchReddit() {
   });
 
   const result = results.slice(0, 30);
-  cache.reddit = { data: result, timestamp: Date.now() };
+  if (result.length > 0) {
+    cache.reddit = { data: result, timestamp: Date.now() };
+  }
   return result;
 }
 
@@ -1046,6 +1189,72 @@ async function fetchHackerNews() {
     console.error('[HN]', err.message);
     return cache.hackernews.data || [];
   }
+}
+
+// ============================================
+// Fetch 4chan Threads
+// ============================================
+async function fetchFourChan() {
+  if (isCacheValid('fourchan')) {
+    return cache.fourchan.data;
+  }
+
+  console.log('[DATA] Fetching 4chan...');
+
+  const boards = ['news', 'pol'];
+  const allThreads = [];
+
+  // Fetch boards sequentially to respect 4chan rate limit (1 req/sec)
+  for (let i = 0; i < boards.length; i++) {
+    const board = boards[i];
+    if (i > 0) {
+      await new Promise(resolve => setTimeout(resolve, 1100));
+    }
+    try {
+      const { data } = await fetch(`https://a.4cdn.org/${board}/catalog.json`, {
+        headers: { 'Accept': 'application/json' },
+        timeout: 8000,
+      });
+      const pages = JSON.parse(data);
+
+      for (const page of pages) {
+        for (const thread of (page.threads || [])) {
+          if ((thread.replies || 0) < 5) continue;
+
+          let title = thread.sub
+            ? decodeEntities(stripHtml(thread.sub))
+            : thread.com
+              ? decodeEntities(stripHtml(thread.com)).substring(0, 80)
+              : null;
+
+          if (!title) continue;
+
+          allThreads.push({
+            id: stableId('4ch', String(thread.no), board),
+            title,
+            board: `/${board}/`,
+            source: `/${board}/`,
+            replies: thread.replies || 0,
+            images: thread.images || 0,
+            timestamp: new Date((thread.time || 0) * 1000).toISOString(),
+            url: `https://boards.4chan.org/${board}/thread/${thread.no}`,
+          });
+        }
+      }
+      console.log(`[4CHAN] /${board}/: ${allThreads.length} threads (filtered)`);
+    } catch (err) {
+      console.error(`[4CHAN] /${board}/ failed:`, err.message);
+    }
+  }
+
+  // Sort by reply count descending, take top 40
+  allThreads.sort((a, b) => b.replies - a.replies);
+  const result = allThreads.slice(0, 40);
+
+  if (result.length > 0) {
+    cache.fourchan = { data: result, timestamp: Date.now() };
+  }
+  return result;
 }
 
 // ============================================
@@ -1149,6 +1358,16 @@ function registerRoutes(app) {
     }
   });
 
+  app.get('/api/4chan', async (req, res) => {
+    try {
+      const data = await fetchFourChan();
+      res.json(data);
+    } catch (err) {
+      console.error('[API] 4chan error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/api/tech', async (req, res) => {
     try {
       const data = await fetchTechNews();
@@ -1159,7 +1378,7 @@ function registerRoutes(app) {
     }
   });
 
-  console.log('[DATA] API routes registered: /api/headlines, /api/ticker, /api/markets, /api/crypto, /api/weather, /api/radar, /api/predictions, /api/reddit, /api/hackernews, /api/tech');
+  console.log('[DATA] API routes registered: /api/headlines, /api/ticker, /api/markets, /api/crypto, /api/weather, /api/radar, /api/predictions, /api/reddit, /api/hackernews, /api/4chan, /api/tech');
 }
 
-module.exports = { registerRoutes, fetchHeadlines, fetchTicker, fetchMarkets, fetchCrypto, fetchWeather, fetchRadarData, fetchPredictions, fetchReddit, fetchHackerNews, fetchTechNews };
+module.exports = { registerRoutes, fetchHeadlines, fetchTicker, fetchMarkets, fetchCrypto, fetchWeather, fetchRadarData, fetchPredictions, fetchReddit, fetchHackerNews, fetchFourChan, fetchTechNews };

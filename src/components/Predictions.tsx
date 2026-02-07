@@ -16,6 +16,7 @@ function getCategoryColor(category: string): string {
     politics: 'text-blue-400',
     finance: 'text-green-400',
     world: 'text-red-400',
+    geopolitical: 'text-orange-400',
     general: 'text-purple-400',
   };
   return colors[category] || 'text-white/50';
@@ -53,12 +54,13 @@ export function Predictions() {
     politics: 'Politics',
     finance: 'Finance',
     world: 'World',
+    geopolitical: 'Geopolitical',
     general: 'General',
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-3 py-1 md:px-2 md:py-0.5">
+    <div className="h-full flex flex-col overflow-hidden min-h-0">
+      <div className="flex-1 overflow-y-auto px-3 py-1 md:px-2 md:py-0.5 min-h-0">
         {error ? (
           <div className="text-white/40 text-xs py-2">{error}</div>
         ) : predictions.length === 0 ? (
@@ -76,24 +78,27 @@ export function Predictions() {
                     href={pred.slug ? `https://polymarket.com/event/${pred.slug}` : '#'}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block py-1 md:py-0.5 hover:bg-white/5 active:bg-white/10 rounded px-1 -mx-1 transition-colors"
+                    className="block py-1.5 md:py-1 hover:bg-white/5 active:bg-white/10 rounded px-1 -mx-1 transition-colors"
                   >
                     <div className="flex items-center gap-2 text-[11px] md:text-[10px] leading-tight">
-                      <span className="text-white/80 flex-1 line-clamp-1">{pred.question}</span>
-                      <span className={`shrink-0 font-medium tabular-nums ${
+                      <span className="text-white/80 flex-1 line-clamp-2 md:line-clamp-1">{pred.question}</span>
+                      <span className={`shrink-0 font-bold tabular-nums text-xs ${
                         pred.yesPrice >= 50 ? 'text-green-400' : 'text-red-400'
                       }`}>
                         {pred.yesPrice}%
                       </span>
                     </div>
-                    {/* Visual bar */}
-                    <div className="mt-0.5 h-1 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          pred.yesPrice >= 50 ? 'bg-green-500/60' : 'bg-red-500/60'
-                        }`}
-                        style={{ width: `${pred.yesPrice}%` }}
-                      />
+                    {/* Visual bar + volume */}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            pred.yesPrice >= 50 ? 'bg-green-500/60' : 'bg-red-500/60'
+                          }`}
+                          style={{ width: `${pred.yesPrice}%` }}
+                        />
+                      </div>
+                      <span className="text-white/30 text-[9px] tabular-nums shrink-0">{pred.volumeDisplay}</span>
                     </div>
                   </a>
                 ))}

@@ -34,6 +34,17 @@ interface RawHNStory {
   timestamp: string;
 }
 
+interface Raw4chanThread {
+  id: string;
+  title: string;
+  board: string;
+  source: string;
+  replies: number;
+  images: number;
+  url: string;
+  timestamp: string;
+}
+
 function normalizeTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
 }
@@ -68,11 +79,12 @@ export function useUnifiedFeed() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [headlinesRes, techRes, redditRes, hnRes] = await Promise.all([
+      const [headlinesRes, techRes, redditRes, hnRes, chanRes] = await Promise.all([
         fetch(`${API_BASE}/api/headlines`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/tech`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/reddit`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/hackernews`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/4chan`).then(r => r.ok ? r.json() : []).catch(() => []),
       ]);
 
       const feedItems: FeedItem[] = [];
@@ -132,6 +144,21 @@ export function useUnifiedFeed() {
           score: h.score,
           comments: h.comments,
           domain: getDomain(h.url),
+        });
+      });
+
+      // Normalize 4chan
+      (chanRes as Raw4chanThread[]).forEach((t) => {
+        feedItems.push({
+          id: t.id,
+          title: t.title,
+          source: t.source,
+          sourceType: 'social',
+          category: t.source,
+          timestamp: t.timestamp,
+          link: t.url,
+          score: t.replies,
+          comments: t.replies,
         });
       });
 

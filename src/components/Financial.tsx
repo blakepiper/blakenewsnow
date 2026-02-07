@@ -28,15 +28,15 @@ function MarketItem({ item, href }: { item: MarketData; href?: string }) {
   return (
     <Tag
       {...(href ? { href, target: '_blank', rel: 'noopener noreferrer' } : {})}
-      className="flex items-center justify-between text-[11px] md:text-[10px] leading-tight py-1.5 md:py-0.5 px-1 -mx-1 rounded hover:bg-white/5 active:bg-white/10 transition-colors"
+      className="flex items-center justify-between text-[11px] md:text-[10px] leading-tight py-1.5 md:py-1 px-1 -mx-1 rounded hover:bg-white/5 active:bg-white/10 transition-colors"
     >
-      <div className="flex items-center gap-2">
-        <span className="text-white/90 font-medium">{item.symbol}</span>
-        <span className="text-white/40 hidden md:inline">{item.name}</span>
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-white/90 font-medium shrink-0">{item.symbol}</span>
+        <span className="text-white/40 truncate">{item.name}</span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0 ml-2">
         <span className="text-white/60 tabular-nums">{formatPrice(item.price)}</span>
-        <span className={`tabular-nums font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+        <span className={`tabular-nums font-medium min-w-[48px] text-right ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
           {isPositive ? '+' : ''}{item.changePercent.toFixed(1)}%
         </span>
       </div>
@@ -85,8 +85,8 @@ export function Financial() {
   }, []);
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-3 py-1 md:px-2 md:py-0.5">
+    <div className="h-full flex flex-col overflow-hidden min-h-0">
+      <div className="flex-1 overflow-y-auto px-3 py-1 md:px-2 md:py-0.5 min-h-0">
         {loading ? (
           <div className="text-white/40 text-xs py-2">Loading...</div>
         ) : (

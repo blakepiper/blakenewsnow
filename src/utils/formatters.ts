@@ -36,6 +36,17 @@ export function getSourceColor(source: string): string {
     'TechCrunch': 'bg-green-500',
     'Wired': 'bg-gray-600',
     'Lobsters': 'bg-red-600',
+    'Washington Post': 'bg-slate-600',
+    'CNN': 'bg-red-600',
+    'Fox News': 'bg-blue-700',
+    'Politico': 'bg-red-500',
+    'The Intercept': 'bg-green-600',
+    'ProPublica': 'bg-yellow-600',
+    'Foreign Policy': 'bg-teal-600',
+    'Breitbart': 'bg-orange-700',
+    'Daily Wire': 'bg-sky-700',
+    '/news/': 'bg-green-700',
+    '/pol/': 'bg-amber-700',
   };
   if (source.startsWith('r/')) return 'bg-orange-600';
   return colors[source] || 'bg-gray-500';
@@ -45,6 +56,7 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'social' {
   const techSources = ['Hacker News', 'Ars Technica', 'The Verge', 'TechCrunch', 'Wired', 'Lobsters'];
   if (techSources.includes(source)) return 'tech';
   if (source.startsWith('r/')) return 'social';
+  if (source.startsWith('/') && source.endsWith('/')) return 'social';
   return 'news';
 }
 

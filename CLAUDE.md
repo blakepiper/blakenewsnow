@@ -1,7 +1,7 @@
 # Blake News Now
 
 **Project:** Blake News Now - Dense Information Dashboard
-**Version:** 0.2.0
+**Version:** 0.3.0
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ src/
 │   ├── Reddit.tsx         # Reddit posts with scores
 │   ├── HackerNews.tsx     # HN stories with points
 │   ├── Weather.tsx        # Weather + radar
-│   ├── Predictions.tsx    # Polymarket odds
+│   ├── Predictions.tsx    # Polymarket + pizzint.watch predictions
 │   ├── Financial.tsx      # Markets + crypto
 │   ├── Ticker.tsx         # Scrolling ticker
 │   ├── FilterPills.tsx    # Quick filters (All/News/Tech/Social/Saved)
@@ -66,21 +66,22 @@ src/
 
 server/
 ├── proxy.cjs              # Express API server
-└── data-feeds.cjs         # RSS, Reddit, HN, weather, markets APIs
+└── data-feeds.cjs         # RSS, Reddit, HN, 4chan, weather, markets, predictions APIs
 ```
 
 ## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| GET /api/headlines | News from RSS feeds |
+| GET /api/headlines | News from 18 RSS feeds |
 | GET /api/reddit | Reddit posts from r/news, r/worldnews, r/technology |
 | GET /api/hackernews | Hacker News top stories |
+| GET /api/4chan | 4chan threads from /news/ and /pol/ (5+ replies, sorted by engagement) |
 | GET /api/weather?zip=XXXXX | Weather + forecast |
 | GET /api/radar | RainViewer radar frames |
 | GET /api/markets | Stock indices + movers |
 | GET /api/crypto | Cryptocurrency prices |
-| GET /api/predictions | Polymarket prediction markets |
+| GET /api/predictions | Polymarket + pizzint.watch predictions (30 items, deduplicated) |
 | GET /api/ticker | Scrolling ticker content |
 | GET /health | Server health check |
 
@@ -122,6 +123,10 @@ server/
 - [x] Compact bottom bar (Weather/Predictions/Markets)
 - [x] Config extracted to src/config.ts
 - [x] Accessibility improvements (aria-labels, contrast)
+- [x] Expanded RSS feeds (9→18 headline sources: +WaPo, CNN, Fox, Politico, Intercept, ProPublica, Foreign Policy, Breitbart, Daily Wire)
+- [x] 4chan integration (/news/, /pol/ — catalog API, 5+ reply filter, rate-limited fetching)
+- [x] pizzint.watch geopolitical predictions (scraped from Next.js RSC payload, merged with Polymarket)
+- [x] Enhanced Polymarket predictions (lower volume threshold $5k, 25 item limit, 30 total with pizzint)
 
 ### TODO
 - [ ] Time-based grouping (Today/Yesterday/This Week)
@@ -137,9 +142,9 @@ server/
 
 | Category | Sources |
 |----------|---------|
-| News | NPR, BBC, Guardian, Al Jazeera, ABC, CBS, NY Times, Reuters, AP |
+| News | NPR, BBC, Guardian, Al Jazeera, ABC, CBS, NY Times, Reuters, AP, Washington Post, CNN, Fox News, Politico, The Intercept, ProPublica, Foreign Policy, Breitbart, Daily Wire |
 | Tech | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters |
-| Social | Reddit (r/news, r/worldnews, r/technology) |
+| Social | Reddit (r/news, r/worldnews, r/technology), 4chan (/news/, /pol/) |
 | Finance | Yahoo Finance, CoinGecko |
-| Predictions | Polymarket |
+| Predictions | Polymarket (politics, finance, world, general), pizzint.watch (geopolitical) |
 | Weather | National Weather Service, RainViewer |
