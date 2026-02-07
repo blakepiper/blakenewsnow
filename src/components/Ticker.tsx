@@ -69,7 +69,7 @@ export function Ticker() {
   return (
     <div className="h-full bg-gradient-to-r from-[#0d0d0d] via-[#111111] to-[#0d0d0d] flex items-center overflow-hidden border-t border-white/10">
       {/* Ticker content */}
-      <div className="animate-ticker flex items-center whitespace-nowrap">
+      <div className="animate-ticker flex items-center whitespace-nowrap will-change-transform">
         {duplicatedItems.map((item, index) => (
           <div key={`${item.id}-${index}`} className="flex items-center">
             {/* Separator */}

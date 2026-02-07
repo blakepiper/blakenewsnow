@@ -1,12 +1,14 @@
-export { Headlines } from './Headlines';
 export { Weather } from './Weather';
 export { Financial } from './Financial';
 export { Predictions } from './Predictions';
 export { Ticker } from './Ticker';
-export { Reddit } from './Reddit';
-export { HackerNews } from './HackerNews';
 export { KeyboardHelp } from './KeyboardHelp';
 export { SearchBar } from './SearchBar';
 export { Settings } from './Settings';
 export { FilterPills } from './FilterPills';
+export { Header } from './Header';
+export { UnifiedFeed } from './UnifiedFeed';
+export { FeedItem } from './FeedItem';
+export { Sidebar } from './Sidebar';
+export { BottomTabBar } from './BottomTabBar';
 export type { FilterType } from './FilterPills';

@@ -3,9 +3,15 @@
  * Fetches headlines from RSS and financial data from Yahoo/CoinGecko
  */
 
+const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
+
+function stableId(prefix, title, source) {
+  const hash = crypto.createHash('md5').update(`${source}:${title}`).digest('hex').slice(0, 10);
+  return `${prefix}-${hash}`;
+}
 
 // ============================================
 // RSS Feed Configuration
@@ -239,8 +245,8 @@ async function fetchHeadlines() {
     return true;
   });
 
-  const result = unique.slice(0, 20).map((item, idx) => ({
-    id: `headline-${idx}`,
+  const result = unique.slice(0, 50).map((item) => ({
+    id: stableId('headline', item.title, item.source),
     title: item.title,
     source: item.source,
     timestamp: item.pubDate.toISOString(),
@@ -793,7 +799,7 @@ async function fetchPredictions() {
                         q.includes('super bowl') || q.includes('world series') || q.includes('stanley cup') ||
                         q.includes('march madness') || q.includes('playoffs') || q.includes('championship');
         if (isSports) return false;
-        if (m.volume24hr < 20000) return false; // Min $20k 24h volume
+        if (m.volume24hr < 10000) return false; // Min $10k 24h volume
 
         // Filter out near-certain outcomes (boring)
         const prices = JSON.parse(m.outcomePrices || '[0.5, 0.5]');
@@ -802,7 +808,7 @@ async function fetchPredictions() {
 
         return true;
       })
-      .slice(0, 8)
+      .slice(0, 18)
       .map(m => {
         const outcomes = JSON.parse(m.outcomes || '["Yes", "No"]');
         const prices = JSON.parse(m.outcomePrices || '[0.5, 0.5]');
@@ -910,8 +916,8 @@ async function fetchTechNews() {
     return true;
   });
 
-  const result = unique.slice(0, 30).map((item, idx) => ({
-    id: `tech-${idx}`,
+  const result = unique.slice(0, 50).map((item) => ({
+    id: stableId('tech', item.title, item.source),
     title: item.title,
     source: item.source,
     timestamp: item.pubDate.toISOString(),

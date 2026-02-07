@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { API_BASE, REFRESH_INTERVALS, ANIMATION_INTERVALS } from '../config';
 
 interface WeatherData {
@@ -45,6 +45,7 @@ export function Weather({ zip = '22314' }: WeatherProps) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [radar, setRadar] = useState<RadarData | null>(null);
   const [radarFrame, setRadarFrame] = useState(0);
+  const [radarPlaying, setRadarPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -77,12 +78,16 @@ export function Weather({ zip = '22314' }: WeatherProps) {
   }, []);
 
   useEffect(() => {
-    if (!radar || radar.frames.length === 0) return;
+    if (!radar || radar.frames.length === 0 || !radarPlaying) return;
     const interval = setInterval(() => {
       setRadarFrame(prev => (prev + 1) % radar.frames.length);
     }, ANIMATION_INTERVALS.radarFrame);
     return () => clearInterval(interval);
-  }, [radar]);
+  }, [radar, radarPlaying]);
+
+  const toggleRadar = useCallback(() => {
+    setRadarPlaying(prev => !prev);
+  }, []);
 
   const getTileCoords = () => {
     if (!weather) return null;
@@ -119,40 +124,47 @@ export function Weather({ zip = '22314' }: WeatherProps) {
   const mapUrl = getMapUrl();
 
   return (
-    <div className="h-full flex overflow-hidden">
+    <div className="h-full flex flex-col md:flex-row overflow-hidden">
       {/* Left: Current conditions */}
-      <div className="flex-1 flex flex-col px-2 py-1 min-w-0">
+      <div className="flex-1 flex flex-col px-3 py-2 md:px-2 md:py-1 min-w-0">
         {/* Top row: Temp + condition + time */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1">
-            <span className="text-lg">{mapConditionToIcon(weather.condition)}</span>
-            <span className="text-white text-xl font-light tabular-nums">{weather.temperature}°</span>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl md:text-lg">{mapConditionToIcon(weather.condition)}</span>
+            <span className="text-white text-3xl md:text-xl font-light tabular-nums">{weather.temperature}°</span>
           </div>
           <div className="text-right">
-            <div className="text-white text-sm font-medium tabular-nums">
+            <div className="text-white text-lg md:text-sm font-medium tabular-nums">
               {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
-            <div className="text-white/50 text-[10px]">
+            <div className="text-white/50 text-xs md:text-[10px]">
               {currentTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
             </div>
           </div>
         </div>
 
+        {/* Condition text */}
+        <div className="text-white/70 text-sm md:text-[10px] mt-0.5">{weather.condition}</div>
+
         {/* Location + details */}
-        <div className="flex items-center gap-2 text-[10px] text-white/60">
+        <div className="flex items-center gap-3 text-xs md:text-[10px] text-white/60 mt-1">
           <span className="truncate">{weather.location}</span>
           {weather.humidity != null && <span>{weather.humidity}%</span>}
           {weather.windSpeed != null && <span>{weather.windSpeed}mph</span>}
+          <span>H:{weather.high}° L:{weather.low}°</span>
         </div>
 
         {/* Forecast */}
-        <div className="flex-1 flex items-end">
-          <div className="flex gap-2 w-full">
+        <div className="flex-1 flex items-end mt-2 md:mt-0">
+          <div className="flex gap-3 md:gap-2 w-full">
             {weather.forecast.slice(0, 5).map((day) => (
-              <div key={day.day} className="flex flex-col items-center text-[9px]">
+              <div key={day.day} className="flex flex-col items-center text-xs md:text-[9px]">
                 <span className="text-white/50">{day.day}</span>
-                <span>{mapConditionToIcon(day.condition)}</span>
+                <span className="text-base md:text-sm">{mapConditionToIcon(day.condition)}</span>
                 <span className="text-white/80 tabular-nums">{day.high}°</span>
+                {day.low != null && (
+                  <span className="text-white/40 tabular-nums">{day.low}°</span>
+                )}
               </div>
             ))}
           </div>
@@ -160,7 +172,10 @@ export function Weather({ zip = '22314' }: WeatherProps) {
       </div>
 
       {/* Right: Radar */}
-      <div className="w-20 h-full relative bg-black shrink-0 overflow-hidden">
+      <div
+        className="w-full h-40 md:w-28 md:h-full relative bg-black shrink-0 overflow-hidden cursor-pointer"
+        onClick={toggleRadar}
+      >
         {mapUrl && (
           <img
             src={mapUrl}
@@ -177,12 +192,13 @@ export function Weather({ zip = '22314' }: WeatherProps) {
               className="absolute inset-0 w-full h-full object-cover"
             />
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-1 h-1 bg-red-500 rounded-full border border-white/50" />
+              <div className="w-1.5 h-1.5 bg-red-500 rounded-full border border-white/50" />
             </div>
           </>
         )}
-        <div className="absolute bottom-0 left-0 text-[8px] text-white/50 bg-black/60 px-0.5">
-          RADAR
+        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between text-[8px] text-white/50 bg-black/60 px-1">
+          <span>RADAR</span>
+          <span>{radarPlaying ? '▶' : '⏸'}</span>
         </div>
       </div>
     </div>

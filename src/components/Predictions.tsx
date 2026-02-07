@@ -8,6 +8,7 @@ interface Prediction {
   volume24h: number;
   volumeDisplay: string;
   category: string;
+  slug?: string;
 }
 
 function getCategoryColor(category: string): string {
@@ -41,27 +42,61 @@ export function Predictions() {
     return () => clearInterval(interval);
   }, []);
 
+  // Group by category
+  const byCategory = predictions.reduce((acc, pred) => {
+    if (!acc[pred.category]) acc[pred.category] = [];
+    acc[pred.category].push(pred);
+    return acc;
+  }, {} as Record<string, Prediction[]>);
+
+  const categoryLabels: Record<string, string> = {
+    politics: 'Politics',
+    finance: 'Finance',
+    world: 'World',
+    general: 'General',
+  };
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="px-2 py-0.5 border-b border-white/10 flex items-center">
-        <span className="text-white/60 text-[10px] font-medium uppercase tracking-wide">Predictions</span>
-      </div>
-      <div className="flex-1 overflow-y-auto px-2 py-0.5">
+      <div className="flex-1 overflow-y-auto px-3 py-1 md:px-2 md:py-0.5">
         {error ? (
-          <div className="text-white/40 text-xs">{error}</div>
+          <div className="text-white/40 text-xs py-2">{error}</div>
+        ) : predictions.length === 0 ? (
+          <div className="text-white/40 text-xs py-2">Loading predictions...</div>
         ) : (
-          <div className="space-y-0">
-            {predictions.slice(0, 6).map((pred) => (
-              <div key={pred.id} className="flex items-center gap-1 text-[10px] leading-tight py-px">
-                <span className={`${getCategoryColor(pred.category)} shrink-0 w-5 uppercase font-medium`}>
-                  {pred.category.substring(0, 3)}
-                </span>
-                <span className="text-white/80 truncate flex-1">{pred.question}</span>
-                <span className={`shrink-0 font-medium tabular-nums ${
-                  pred.yesPrice >= 50 ? 'text-green-400' : 'text-red-400'
-                }`}>
-                  {pred.yesPrice}%
-                </span>
+          <div className="space-y-2 md:space-y-1">
+            {Object.entries(byCategory).map(([category, preds]) => (
+              <div key={category}>
+                <div className={`text-[10px] font-medium uppercase tracking-wide mb-0.5 ${getCategoryColor(category)}`}>
+                  {categoryLabels[category] || category}
+                </div>
+                {preds.map((pred) => (
+                  <a
+                    key={pred.id}
+                    href={pred.slug ? `https://polymarket.com/event/${pred.slug}` : '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block py-1 md:py-0.5 hover:bg-white/5 active:bg-white/10 rounded px-1 -mx-1 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 text-[11px] md:text-[10px] leading-tight">
+                      <span className="text-white/80 flex-1 line-clamp-1">{pred.question}</span>
+                      <span className={`shrink-0 font-medium tabular-nums ${
+                        pred.yesPrice >= 50 ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {pred.yesPrice}%
+                      </span>
+                    </div>
+                    {/* Visual bar */}
+                    <div className="mt-0.5 h-1 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          pred.yesPrice >= 50 ? 'bg-green-500/60' : 'bg-red-500/60'
+                        }`}
+                        style={{ width: `${pred.yesPrice}%` }}
+                      />
+                    </div>
+                  </a>
+                ))}
               </div>
             ))}
           </div>

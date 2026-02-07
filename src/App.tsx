@@ -1,31 +1,22 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
-  Headlines,
   Weather,
   Financial,
   Predictions,
   Ticker,
-  Reddit,
-  HackerNews,
   KeyboardHelp,
   SearchBar,
   Settings,
-  FilterPills,
 } from './components';
 import type { FilterType } from './components';
+import { Header } from './components/Header';
+import { UnifiedFeed } from './components/UnifiedFeed';
+import { Sidebar } from './components/Sidebar';
+import { BottomTabBar } from './components/BottomTabBar';
 import { useSettings, useKeyboard } from './hooks';
-import { API_BASE, REFRESH_INTERVALS } from './config';
+import { useUnifiedFeed } from './hooks/useUnifiedFeed';
+import type { MobileView } from './types';
 import './App.css';
-
-interface Article {
-  id: string;
-  title: string;
-  source: string;
-  timestamp: string;
-  link?: string;
-  description?: string;
-  type?: 'headline' | 'reddit' | 'hackernews';
-}
 
 function App() {
   const {
@@ -39,6 +30,7 @@ function App() {
     removeFromReadingList,
     isInReadingList,
     markAsRead,
+    toggleSection,
   } = useSettings();
 
   // UI State
@@ -47,73 +39,27 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [activeView, setActiveView] = useState<MobileView>('feed');
 
-  // Data for search
-  const [allHeadlines, setAllHeadlines] = useState<Article[]>([]);
-  const headlinesRef = useRef<HTMLDivElement>(null);
+  // Unified feed
+  const { items, loading, error, newItemIds, refresh } = useUnifiedFeed();
 
-  // Section refs for jumping
-  const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // Filter items for search (flat list for search compatibility)
+  const allHeadlines = items.map(item => ({
+    id: item.id,
+    title: item.title,
+    source: item.source,
+    timestamp: item.timestamp,
+    link: item.link,
+    type: item.sourceType === 'social' ? 'reddit' as const : item.sourceType === 'tech' ? 'hackernews' as const : 'headline' as const,
+  }));
 
-  // Fetch all headlines for search
-  useEffect(() => {
-    async function fetchAll() {
-      try {
-        const [headlinesRes, redditRes, hnRes] = await Promise.all([
-          fetch(`${API_BASE}/api/headlines`).then(r => r.json()).catch(() => []),
-          fetch(`${API_BASE}/api/reddit`).then(r => r.json()).catch(() => []),
-          fetch(`${API_BASE}/api/hackernews`).then(r => r.json()).catch(() => []),
-        ]);
-
-        const combined = [
-          ...headlinesRes.map((h: Article) => ({ ...h, type: 'headline' })),
-          ...redditRes.map((r: Article & { permalink?: string }) => ({
-            id: r.id,
-            title: r.title,
-            source: r.source,
-            timestamp: r.timestamp,
-            link: r.permalink || r.link,
-            type: 'reddit',
-          })),
-          ...hnRes.map((h: Article & { permalink?: string; url?: string }) => ({
-            id: h.id,
-            title: h.title,
-            source: h.source,
-            timestamp: h.timestamp,
-            link: h.url || h.permalink || h.link,
-            type: 'hackernews',
-          })),
-        ];
-
-        setAllHeadlines(combined);
-      } catch (err) {
-        console.error('Failed to fetch headlines for search:', err);
-      }
-    }
-
-    fetchAll();
-    const interval = setInterval(fetchAll, REFRESH_INTERVALS.search);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Scroll selected headline into view
-  useEffect(() => {
-    if (headlinesRef.current) {
-      const items = headlinesRef.current.querySelectorAll('[data-headline]');
-      const selectedItem = items[selectedIndex];
-      if (selectedItem) {
-        selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
-    }
-  }, [selectedIndex]);
-
-  // Open article in new tab
-  const openArticle = useCallback((article: Article) => {
-    if (article.link) {
-      window.open(article.link, '_blank', 'noopener,noreferrer');
-      markAsRead(article.id);
-    }
-  }, [markAsRead]);
+  // Filtered items for keyboard nav count
+  const filteredItems = items.filter(item => {
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'saved') return settings.readingList.includes(item.id);
+    return item.sourceType === activeFilter;
+  });
 
   const handleNavigateUp = useCallback(() => {
     if (showSearch || showSettings || showKeyboardHelp) return;
@@ -122,16 +68,17 @@ function App() {
 
   const handleNavigateDown = useCallback(() => {
     if (showSearch || showSettings || showKeyboardHelp) return;
-    setSelectedIndex(prev => Math.min(allHeadlines.length - 1, prev + 1));
-  }, [showSearch, showSettings, showKeyboardHelp, allHeadlines.length]);
+    setSelectedIndex(prev => Math.min(filteredItems.length - 1, prev + 1));
+  }, [showSearch, showSettings, showKeyboardHelp, filteredItems.length]);
 
   const handleSelect = useCallback(() => {
     if (showSearch || showSettings || showKeyboardHelp) return;
-    const article = allHeadlines[selectedIndex];
-    if (article) {
-      openArticle(article);
+    const article = filteredItems[selectedIndex];
+    if (article?.link) {
+      window.open(article.link, '_blank', 'noopener,noreferrer');
+      markAsRead(article.id);
     }
-  }, [showSearch, showSettings, showKeyboardHelp, allHeadlines, selectedIndex, openArticle]);
+  }, [showSearch, showSettings, showKeyboardHelp, filteredItems, selectedIndex, markAsRead]);
 
   const handleSearch = useCallback(() => {
     if (showSettings || showKeyboardHelp) return;
@@ -153,10 +100,12 @@ function App() {
   }, []);
 
   const handleSection = useCallback((section: number) => {
-    const ref = sectionRefs.current[section - 1];
-    if (ref) {
-      ref.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    // Sections map to views on mobile-like behavior
+    if (section === 1) setActiveFilter('all');
+    else if (section === 2) setActiveFilter('news');
+    else if (section === 3) setActiveFilter('tech');
+    else if (section === 4) setActiveFilter('social');
+    else if (section === 5) setActiveFilter('saved');
   }, []);
 
   const handleSettings = useCallback(() => {
@@ -164,7 +113,7 @@ function App() {
   }, []);
 
   const handleSave = useCallback(() => {
-    const article = allHeadlines[selectedIndex];
+    const article = filteredItems[selectedIndex];
     if (article) {
       if (isInReadingList(article.id)) {
         removeFromReadingList(article.id);
@@ -172,12 +121,15 @@ function App() {
         addToReadingList(article.id);
       }
     }
-  }, [allHeadlines, selectedIndex, isInReadingList, addToReadingList, removeFromReadingList]);
+  }, [filteredItems, selectedIndex, isInReadingList, addToReadingList, removeFromReadingList]);
 
-  const handleSelectFromSearch = useCallback((result: Article) => {
-    openArticle(result);
+  const handleSelectFromSearch = useCallback((result: { id: string; link?: string }) => {
+    if (result.link) {
+      window.open(result.link, '_blank', 'noopener,noreferrer');
+      markAsRead(result.id);
+    }
     setShowSearch(false);
-  }, [openArticle]);
+  }, [markAsRead]);
 
   // Keyboard navigation
   useKeyboard({
@@ -192,187 +144,113 @@ function App() {
     onSave: handleSave,
   });
 
-  const isDashboard = settings.layout === 'dashboard';
-
   return (
     <div className="fixed inset-0 bg-[#0a0a0a] flex flex-col text-xs">
-      {/* Compact Header */}
-      <div className="h-7 shrink-0 border-b border-white/10 flex items-center justify-between px-2">
-        <div className="flex items-center gap-2">
-          <h1 className="text-white font-medium text-sm">BNN</h1>
-          <FilterPills
-            activeFilter={activeFilter}
-            onFilterChange={setActiveFilter}
-            savedCount={settings.readingList.length}
+      {/* Header */}
+      <Header
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
+        savedCount={settings.readingList.length}
+        onSearchOpen={() => setShowSearch(true)}
+        onHelpOpen={() => setShowKeyboardHelp(true)}
+        onSettingsOpen={() => setShowSettings(true)}
+      />
+
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Desktop: Two-column layout (feed + sidebar) */}
+        {/* Mobile: Single view controlled by bottom tabs */}
+
+        {/* Feed — always visible on desktop, shown on mobile when activeView='feed' */}
+        <div className={`flex-1 overflow-hidden ${activeView !== 'feed' ? 'hidden md:block' : ''}`}>
+          <UnifiedFeed
+            items={items}
+            loading={loading}
+            error={error}
+            filter={activeFilter}
+            selectedIndex={selectedIndex}
+            onSelectIndex={setSelectedIndex}
+            onMarkAsRead={markAsRead}
+            readArticles={settings.readArticles}
+            savedArticles={settings.readingList}
+            newItemIds={newItemIds}
+            onRefresh={refresh}
           />
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setShowSearch(true)}
-            className="text-white/50 hover:text-white p-1 rounded hover:bg-white/10"
-            aria-label="Search"
-            title="Search (/)"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowKeyboardHelp(true)}
-            className="text-white/50 hover:text-white p-1 rounded hover:bg-white/10"
-            aria-label="Shortcuts"
-            title="Shortcuts (?)"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="text-white/50 hover:text-white p-1 rounded hover:bg-white/10"
-            aria-label="Settings"
-            title="Settings (Ctrl+,)"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        </div>
-      </div>
 
-      {/* Main Content - Dense 3-Column Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {isDashboard ? (
-          // Dashboard: 3 equal columns
-          <div className="flex-1 grid grid-cols-3 gap-px bg-white/10">
-            <div ref={el => { sectionRefs.current[0] = el; }} className="bg-[#0a0a0a] overflow-hidden">
-              <Headlines
-                selectedIndex={selectedIndex}
-                onSelectIndex={setSelectedIndex}
-                onMarkAsRead={markAsRead}
-                readArticles={settings.readArticles}
-                savedArticles={settings.readingList}
-                filter={activeFilter}
-              />
+        {/* Desktop sidebar */}
+        <Sidebar
+          zip={settings.location.zip}
+          collapsedSections={settings.collapsedSections}
+          onToggleSection={toggleSection}
+        />
+
+        {/* Mobile: Markets view */}
+        {activeView === 'markets' && (
+          <div className="flex-1 overflow-y-auto md:hidden feed-scroll">
+            <div className="p-3">
+              <h2 className="text-white/60 text-xs font-medium uppercase tracking-wide mb-2">Markets & Crypto</h2>
             </div>
-            <div className="bg-[#0a0a0a] overflow-hidden flex flex-col">
-              <div ref={el => { sectionRefs.current[1] = el; }} className="flex-1 overflow-hidden border-b border-white/10">
-                <Reddit
-                  onSelectPost={(post) => {
-                    if (post.permalink) {
-                      window.open(post.permalink, '_blank', 'noopener,noreferrer');
-                      markAsRead(post.id);
-                    }
-                  }}
-                  maxItems={25}
-                />
+            <Financial />
+            <div className="border-t border-white/10 mt-2">
+              <div className="p-3">
+                <h2 className="text-white/60 text-xs font-medium uppercase tracking-wide mb-2">Predictions</h2>
               </div>
-              <div className="flex-1 overflow-hidden">
-                <HackerNews
-                  onSelectStory={(story) => {
-                    const url = story.url || story.permalink;
-                    if (url) {
-                      window.open(url, '_blank', 'noopener,noreferrer');
-                      markAsRead(story.id);
-                    }
-                  }}
-                  maxItems={25}
-                />
-              </div>
-            </div>
-            <div className="bg-[#0a0a0a] overflow-hidden flex flex-col">
-              <div ref={el => { sectionRefs.current[2] = el; }} className="h-[100px] shrink-0 border-b border-white/10">
-                <Weather zip={settings.location.zip} />
-              </div>
-              <div ref={el => { sectionRefs.current[3] = el; }} className="flex-1 overflow-hidden border-b border-white/10">
-                <Predictions />
-              </div>
-              <div ref={el => { sectionRefs.current[4] = el; }} className="flex-1 overflow-hidden">
-                <Financial />
-              </div>
+              <Predictions />
             </div>
           </div>
-        ) : (
-          // Compact: Headlines dominant, info bar at bottom
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Main content area - 3 columns */}
-            <div className="flex-1 flex overflow-hidden">
-              {/* Headlines - 50% */}
-              <div
-                ref={el => {
-                  sectionRefs.current[0] = el;
-                  headlinesRef.current = el;
-                }}
-                className="flex-1 overflow-hidden border-r border-white/10"
-              >
-                <Headlines
-                  selectedIndex={selectedIndex}
-                  onSelectIndex={setSelectedIndex}
-                  onMarkAsRead={markAsRead}
-                  readArticles={settings.readArticles}
-                  savedArticles={settings.readingList}
-                  filter={activeFilter}
-                />
-              </div>
+        )}
 
-              {/* Reddit - 25% */}
-              <div
-                ref={el => { sectionRefs.current[1] = el; }}
-                className="w-1/4 overflow-hidden border-r border-white/10"
-              >
-                <Reddit
-                  onSelectPost={(post) => {
-                    if (post.permalink) {
-                      window.open(post.permalink, '_blank', 'noopener,noreferrer');
-                      markAsRead(post.id);
-                    }
-                  }}
-                  maxItems={50}
-                />
-              </div>
-
-              {/* Hacker News - 25% */}
-              <div className="w-1/4 overflow-hidden">
-                <HackerNews
-                  onSelectStory={(story) => {
-                    const url = story.url || story.permalink;
-                    if (url) {
-                      window.open(url, '_blank', 'noopener,noreferrer');
-                      markAsRead(story.id);
-                    }
-                  }}
-                  maxItems={50}
-                />
-              </div>
+        {/* Mobile: Weather view */}
+        {activeView === 'weather' && (
+          <div className="flex-1 overflow-y-auto md:hidden feed-scroll">
+            <div className="h-[250px]">
+              <Weather zip={settings.location.zip} />
             </div>
+          </div>
+        )}
 
-            {/* Bottom info bar - Weather + Predictions + Financial */}
-            <div className="h-24 shrink-0 border-t border-white/10 flex">
-              <div
-                ref={el => { sectionRefs.current[2] = el; }}
-                className="w-1/3 border-r border-white/10"
+        {/* Mobile: More view */}
+        {activeView === 'more' && (
+          <div className="flex-1 overflow-y-auto md:hidden feed-scroll p-4">
+            <div className="space-y-3">
+              <button
+                onClick={() => setShowSettings(true)}
+                className="w-full flex items-center gap-3 p-3 rounded-lg bg-white/5 active:bg-white/10 text-left"
               >
-                <Weather zip={settings.location.zip} />
-              </div>
-              <div
-                ref={el => { sectionRefs.current[3] = el; }}
-                className="w-1/3 border-r border-white/10"
+                <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <div>
+                  <div className="text-white/90 text-sm font-medium">Settings</div>
+                  <div className="text-white/50 text-xs">Sources, location, display</div>
+                </div>
+              </button>
+              <button
+                onClick={() => setShowKeyboardHelp(true)}
+                className="w-full flex items-center gap-3 p-3 rounded-lg bg-white/5 active:bg-white/10 text-left"
               >
-                <Predictions />
-              </div>
-              <div ref={el => { sectionRefs.current[4] = el; }} className="w-1/3">
-                <Financial />
-              </div>
+                <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <div className="text-white/90 text-sm font-medium">Keyboard Shortcuts</div>
+                  <div className="text-white/50 text-xs">j/k, Enter, /, Esc</div>
+                </div>
+              </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Bottom Ticker */}
-      <div className="h-6 overflow-hidden relative shrink-0 border-t border-white/10">
+      {/* Bottom Ticker — desktop only */}
+      <div className="hidden md:block h-6 overflow-hidden relative shrink-0 border-t border-white/10">
         <Ticker />
       </div>
+
+      {/* Bottom Tab Bar — mobile only */}
+      <BottomTabBar activeView={activeView} onChangeView={setActiveView} />
 
       {/* Modals */}
       {showKeyboardHelp && (

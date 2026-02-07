@@ -157,15 +157,15 @@ export function SearchBar({ headlines, onSelect, onClose, isOpen }: SearchBarPro
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 z-50 flex items-start justify-center pt-24"
+      className="fixed inset-0 bg-black/80 z-50 flex items-start justify-center pt-0 md:pt-24"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl overflow-hidden"
+        className="w-full h-full md:h-auto md:max-w-2xl bg-[#1a1a1a] md:border md:border-white/10 md:rounded-lg shadow-2xl overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Search Input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
+        <div className="flex items-center gap-3 px-4 py-4 md:py-3 border-b border-white/10 pt-[max(1rem,var(--sat))]">
           <svg className="w-5 h-5 text-white/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -184,7 +184,7 @@ export function SearchBar({ headlines, onSelect, onClose, isOpen }: SearchBarPro
         </div>
 
         {/* Results */}
-        <div ref={listRef} className="max-h-96 overflow-y-auto">
+        <div ref={listRef} className="flex-1 md:max-h-96 overflow-y-auto">
           {query.length < 2 ? (
             <div className="px-4 py-6 text-center text-white/40 text-sm">
               Type at least 2 characters to search

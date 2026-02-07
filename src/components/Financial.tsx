@@ -21,6 +21,29 @@ function formatPrice(price: number): string {
   return price.toFixed(2);
 }
 
+function MarketItem({ item, href }: { item: MarketData; href?: string }) {
+  const isPositive = item.change >= 0;
+  const Tag = href ? 'a' : 'div';
+
+  return (
+    <Tag
+      {...(href ? { href, target: '_blank', rel: 'noopener noreferrer' } : {})}
+      className="flex items-center justify-between text-[11px] md:text-[10px] leading-tight py-1.5 md:py-0.5 px-1 -mx-1 rounded hover:bg-white/5 active:bg-white/10 transition-colors"
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-white/90 font-medium">{item.symbol}</span>
+        <span className="text-white/40 hidden md:inline">{item.name}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-white/60 tabular-nums">{formatPrice(item.price)}</span>
+        <span className={`tabular-nums font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+          {isPositive ? '+' : ''}{item.changePercent.toFixed(1)}%
+        </span>
+      </div>
+    </Tag>
+  );
+}
+
 export function Financial() {
   const [indices, setIndices] = useState<MarketData[]>([]);
   const [crypto, setCrypto] = useState<MarketData[]>([]);
@@ -61,32 +84,54 @@ export function Financial() {
     return () => clearInterval(interval);
   }, []);
 
-  const allItems = [...indices, ...crypto.slice(0, 3), ...movers.slice(0, 2)];
-
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="px-2 py-0.5 border-b border-white/10 flex items-center">
-        <span className="text-white/60 text-[10px] font-medium uppercase tracking-wide">Markets</span>
-      </div>
-      <div className="flex-1 overflow-y-auto px-2 py-0.5">
+      <div className="flex-1 overflow-y-auto px-3 py-1 md:px-2 md:py-0.5">
         {loading ? (
-          <div className="text-white/40 text-xs">Loading...</div>
+          <div className="text-white/40 text-xs py-2">Loading...</div>
         ) : (
-          <div className="grid grid-cols-2 gap-x-2 gap-y-0">
-            {allItems.map((item) => {
-              const isPositive = item.change >= 0;
-              return (
-                <div key={item.symbol} className="flex items-center justify-between text-[10px] leading-tight py-px">
-                  <span className="text-white/80 font-medium">{item.symbol}</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-white/60 tabular-nums">{formatPrice(item.price)}</span>
-                    <span className={`tabular-nums font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                      {isPositive ? '+' : ''}{item.changePercent.toFixed(1)}%
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="space-y-2 md:space-y-1">
+            {/* Indices */}
+            {indices.length > 0 && (
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-white/40 mb-0.5">Indices</div>
+                {indices.map((item) => (
+                  <MarketItem
+                    key={item.symbol}
+                    item={item}
+                    href={`https://finance.yahoo.com/quote/${encodeURIComponent(item.symbol === 'SPX' ? '^GSPC' : item.symbol === 'DJI' ? '^DJI' : item.symbol === 'IXIC' ? '^IXIC' : '^' + item.symbol)}`}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Crypto */}
+            {crypto.length > 0 && (
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-white/40 mb-0.5">Crypto</div>
+                {crypto.map((item) => (
+                  <MarketItem
+                    key={item.symbol}
+                    item={item}
+                    href={`https://www.coingecko.com/en/coins/${item.name.toLowerCase()}`}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Movers */}
+            {movers.length > 0 && (
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-white/40 mb-0.5">Movers</div>
+                {movers.map((item) => (
+                  <MarketItem
+                    key={item.symbol}
+                    item={item}
+                    href={`https://finance.yahoo.com/quote/${item.symbol}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

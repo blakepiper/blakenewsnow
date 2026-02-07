@@ -11,7 +11,7 @@ export function KeyboardHelp({ onClose }: KeyboardHelpProps) {
       onClick={onClose}
     >
       <div
-        className="bg-[#1a1a1a] border border-white/10 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl"
+        className="bg-[#1a1a1a] border border-white/10 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">

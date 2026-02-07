@@ -16,7 +16,7 @@ const filters: { id: FilterType; label: string }[] = [
 
 export function FilterPills({ activeFilter, onFilterChange, savedCount = 0 }: FilterPillsProps) {
   return (
-    <div className="flex items-center gap-1.5 px-2 py-1.5">
+    <div className="flex items-center gap-1.5 px-2 py-1.5 overflow-x-auto scrollbar-hide">
       {filters.map((filter) => {
         const isActive = activeFilter === filter.id;
         const showCount = filter.id === 'saved' && savedCount > 0;
@@ -25,10 +25,10 @@ export function FilterPills({ activeFilter, onFilterChange, savedCount = 0 }: Fi
           <button
             key={filter.id}
             onClick={() => onFilterChange(filter.id)}
-            className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+            className={`shrink-0 px-4 py-2 md:px-3 md:py-1 text-xs font-medium rounded-full transition-colors min-h-[36px] md:min-h-0 ${
               isActive
                 ? 'bg-white/20 text-white'
-                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'
+                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 active:bg-white/15'
             }`}
           >
             {filter.label}

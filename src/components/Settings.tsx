@@ -143,7 +143,7 @@ export function Settings({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl max-h-[80vh] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+        className="w-full h-full md:h-auto md:max-w-2xl md:max-h-[80vh] bg-[#1a1a1a] md:border md:border-white/10 md:rounded-lg shadow-2xl overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -299,30 +299,9 @@ export function Settings({
             <div className="space-y-4">
               <div>
                 <h3 className="text-white/70 text-sm mb-2">Layout</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => onSetLayout('compact')}
-                    className={`p-4 rounded border transition-colors ${
-                      settings.layout === 'compact'
-                        ? 'border-blue-500 bg-blue-500/10'
-                        : 'border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    <div className="text-white/90 text-sm font-medium mb-1">Compact</div>
-                    <div className="text-white/40 text-xs">Single column layout</div>
-                  </button>
-                  <button
-                    onClick={() => onSetLayout('dashboard')}
-                    className={`p-4 rounded border transition-colors ${
-                      settings.layout === 'dashboard'
-                        ? 'border-blue-500 bg-blue-500/10'
-                        : 'border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    <div className="text-white/90 text-sm font-medium mb-1">Dashboard</div>
-                    <div className="text-white/40 text-xs">Multi-column grid</div>
-                  </button>
-                </div>
+                <p className="text-white/50 text-xs">
+                  The layout automatically adapts to your screen size. Desktop shows a two-column layout with the feed and sidebar. Mobile shows a single column with bottom tab navigation.
+                </p>
               </div>
             </div>
           )}
