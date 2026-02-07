@@ -24,6 +24,7 @@ export const REFRESH_INTERVALS = {
 export const ANIMATION_INTERVALS = {
   radarFrame: 400,           // 400ms between radar frames
   clock: 1000,               // 1 second clock update
+  globeRotation: 10000,      // 10 seconds between city rotations
 } as const;
 
 // UI Timing

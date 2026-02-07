@@ -46,7 +46,7 @@ export function FeedItem({
       onClick={handleClick}
       onAuxClick={handleAuxClick}
       className={`
-        block cursor-pointer transition-colors
+        block cursor-pointer transition-colors border-b border-white/5
         ${isSelected ? 'bg-white/10' : 'hover:bg-white/5 active:bg-white/10'}
         ${isRead ? 'opacity-50' : ''}
         ${isNew ? 'new-item-glow headline-enter' : ''}

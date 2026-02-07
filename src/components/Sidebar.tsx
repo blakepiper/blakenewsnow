@@ -1,6 +1,9 @@
+import { lazy, Suspense } from 'react';
 import { Weather } from './Weather';
 import { Predictions } from './Predictions';
 import { Financial } from './Financial';
+
+const Globe = lazy(() => import('./Globe').then(m => ({ default: m.Globe })));
 
 interface SidebarProps {
   zip: string;
@@ -51,8 +54,25 @@ export function Sidebar({ zip, collapsedSections, onToggleSection }: SidebarProp
         onToggle={() => onToggleSection('weather')}
         className="shrink-0"
       >
-        <div className="h-[140px]">
+        <div className="h-[180px]">
           <Weather zip={zip} />
+        </div>
+      </SidebarSection>
+
+      <SidebarSection
+        title="Globe"
+        collapsed={collapsedSections.includes('globe')}
+        onToggle={() => onToggleSection('globe')}
+        className="shrink-0"
+      >
+        <div className="h-[200px]">
+          <Suspense fallback={
+            <div className="h-full flex items-center justify-center text-white/50 text-xs">
+              Loading globe...
+            </div>
+          }>
+            <Globe />
+          </Suspense>
         </div>
       </SidebarSection>
 

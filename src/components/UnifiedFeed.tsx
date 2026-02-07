@@ -1,7 +1,8 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import type { FeedItem as FeedItemType } from '../types';
 import type { FilterType } from './FilterPills';
 import { FeedItem } from './FeedItem';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface UnifiedFeedProps {
   items: FeedItemType[];
@@ -42,7 +43,10 @@ export function UnifiedFeed({
   newItemIds,
   onRefresh,
 }: UnifiedFeedProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const leftRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const mobileRef = useRef<HTMLDivElement>(null);
   const [pullDistance, setPullDistance] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
   const touchStartY = useRef(0);
@@ -54,9 +58,28 @@ export function UnifiedFeed({
     return item.sourceType === filter;
   });
 
-  // Pull-to-refresh touch handlers
+  const splitPoint = Math.ceil(filteredItems.length / 2);
+
+  // Auto-scroll to selected item
+  useEffect(() => {
+    if (isDesktop) {
+      const isLeft = selectedIndex < splitPoint;
+      const container = isLeft ? leftRef.current : rightRef.current;
+      if (!container) return;
+      const localIndex = isLeft ? selectedIndex : selectedIndex - splitPoint;
+      const els = container.querySelectorAll('[data-headline]');
+      els[localIndex]?.scrollIntoView({ block: 'nearest' });
+    } else {
+      const container = mobileRef.current;
+      if (!container) return;
+      const els = container.querySelectorAll('[data-headline]');
+      els[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [selectedIndex, isDesktop, splitPoint]);
+
+  // Pull-to-refresh touch handlers (mobile only)
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (scrollRef.current && scrollRef.current.scrollTop === 0) {
+    if (mobileRef.current && mobileRef.current.scrollTop === 0) {
       touchStartY.current = e.touches[0].clientY;
       setIsPulling(true);
     }
@@ -86,46 +109,86 @@ export function UnifiedFeed({
     );
   }
 
-  return (
-    <div
-      ref={scrollRef}
-      className="h-full overflow-y-auto feed-scroll"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
-      {/* Pull-to-refresh indicator (mobile) */}
-      {pullDistance > 0 && (
-        <div
-          className="flex items-center justify-center text-white/50 text-xs md:hidden"
-          style={{ height: pullDistance }}
-        >
-          {pullDistance > 60 ? 'Release to refresh' : 'Pull to refresh'}
-        </div>
-      )}
+  if (error) {
+    return <div className="px-3 py-4 text-center text-white/60 text-sm">{error}</div>;
+  }
 
-      {error ? (
-        <div className="px-3 py-4 text-center text-white/60 text-sm">{error}</div>
-      ) : filteredItems.length === 0 ? (
-        <div className="px-3 py-8 text-center text-white/50 text-sm">
-          {filter === 'saved' ? 'No saved articles.' : 'No items to show.'}
-        </div>
-      ) : (
-        <div className="divide-y divide-white/5">
-          {filteredItems.map((item, index) => (
-            <FeedItem
-              key={item.id}
-              item={item}
-              isSelected={selectedIndex === index}
-              isRead={readArticles.includes(item.id)}
-              isSaved={savedArticles.includes(item.id)}
-              isNew={newItemIds.has(item.id)}
-              onSelect={() => onSelectIndex(index)}
-              onMarkAsRead={onMarkAsRead}
-            />
-          ))}
-        </div>
-      )}
+  if (filteredItems.length === 0) {
+    return (
+      <div className="px-3 py-8 text-center text-white/50 text-sm">
+        {filter === 'saved' ? 'No saved articles.' : 'No items to show.'}
+      </div>
+    );
+  }
+
+  // Mobile: single scrollable column
+  if (!isDesktop) {
+    return (
+      <div
+        ref={mobileRef}
+        className="h-full overflow-y-auto feed-scroll"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {pullDistance > 0 && (
+          <div
+            className="flex items-center justify-center text-white/50 text-xs"
+            style={{ height: pullDistance }}
+          >
+            {pullDistance > 60 ? 'Release to refresh' : 'Pull to refresh'}
+          </div>
+        )}
+        {filteredItems.map((item, index) => (
+          <FeedItem
+            key={item.id}
+            item={item}
+            isSelected={selectedIndex === index}
+            isRead={readArticles.includes(item.id)}
+            isSaved={savedArticles.includes(item.id)}
+            isNew={newItemIds.has(item.id)}
+            onSelect={() => onSelectIndex(index)}
+            onMarkAsRead={onMarkAsRead}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // Desktop: two independently scrollable columns
+  const leftItems = filteredItems.slice(0, splitPoint);
+  const rightItems = filteredItems.slice(splitPoint);
+
+  return (
+    <div className="h-full flex">
+      <div ref={leftRef} className="flex-1 overflow-y-auto feed-scroll border-r border-white/5">
+        {leftItems.map((item, i) => (
+          <FeedItem
+            key={item.id}
+            item={item}
+            isSelected={selectedIndex === i}
+            isRead={readArticles.includes(item.id)}
+            isSaved={savedArticles.includes(item.id)}
+            isNew={newItemIds.has(item.id)}
+            onSelect={() => onSelectIndex(i)}
+            onMarkAsRead={onMarkAsRead}
+          />
+        ))}
+      </div>
+      <div ref={rightRef} className="flex-1 overflow-y-auto feed-scroll">
+        {rightItems.map((item, i) => (
+          <FeedItem
+            key={item.id}
+            item={item}
+            isSelected={selectedIndex === splitPoint + i}
+            isRead={readArticles.includes(item.id)}
+            isSaved={savedArticles.includes(item.id)}
+            isNew={newItemIds.has(item.id)}
+            onSelect={() => onSelectIndex(splitPoint + i)}
+            onMarkAsRead={onMarkAsRead}
+          />
+        ))}
+      </div>
     </div>
   );
 }

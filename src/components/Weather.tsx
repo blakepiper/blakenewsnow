@@ -91,9 +91,10 @@ export function Weather({ zip = '22314' }: WeatherProps) {
 
   const getTileCoords = () => {
     if (!weather) return null;
-    const zoom = 6;
-    const x = Math.floor((weather.lon + 180) / 360 * Math.pow(2, zoom));
-    const y = Math.floor((1 - Math.log(Math.tan(weather.lat * Math.PI / 180) + 1 / Math.cos(weather.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+    const zoom = 7;
+    const n = Math.pow(2, zoom);
+    const x = Math.floor((weather.lon + 180) / 360 * n);
+    const y = Math.floor((1 - Math.log(Math.tan(weather.lat * Math.PI / 180) + 1 / Math.cos(weather.lat * Math.PI / 180)) / Math.PI) / 2 * n);
     return { zoom, x, y };
   };
 
@@ -125,8 +126,8 @@ export function Weather({ zip = '22314' }: WeatherProps) {
 
   return (
     <div className="h-full flex flex-col md:flex-row overflow-hidden">
-      {/* Left: Current conditions */}
-      <div className="flex-1 flex flex-col px-3 py-2 md:px-2 md:py-1 min-w-0">
+      {/* Conditions — full width on mobile, narrow on desktop */}
+      <div className="flex-1 md:flex-none md:w-[160px] flex flex-col px-3 py-2 md:px-2 md:py-1 min-w-0">
         {/* Top row: Temp + condition + time */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -147,23 +148,23 @@ export function Weather({ zip = '22314' }: WeatherProps) {
         <div className="text-white/70 text-sm md:text-[10px] mt-0.5">{weather.condition}</div>
 
         {/* Location + details */}
-        <div className="flex items-center gap-3 text-xs md:text-[10px] text-white/60 mt-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0 text-xs md:text-[10px] text-white/60 mt-1">
           <span className="truncate">{weather.location}</span>
           {weather.humidity != null && <span>{weather.humidity}%</span>}
           {weather.windSpeed != null && <span>{weather.windSpeed}mph</span>}
           <span>H:{weather.high}° L:{weather.low}°</span>
         </div>
 
-        {/* Forecast */}
-        <div className="flex-1 flex items-end mt-2 md:mt-0">
-          <div className="flex gap-3 md:gap-2 w-full">
+        {/* Forecast — visible on mobile, compact on desktop */}
+        <div className="flex-1 flex items-end mt-2 md:mt-1">
+          <div className="flex gap-3 md:gap-1 w-full overflow-hidden">
             {weather.forecast.slice(0, 5).map((day) => (
               <div key={day.day} className="flex flex-col items-center text-xs md:text-[9px]">
                 <span className="text-white/50">{day.day}</span>
-                <span className="text-base md:text-sm">{mapConditionToIcon(day.condition)}</span>
+                <span className="text-base md:text-xs">{mapConditionToIcon(day.condition)}</span>
                 <span className="text-white/80 tabular-nums">{day.high}°</span>
                 {day.low != null && (
-                  <span className="text-white/40 tabular-nums">{day.low}°</span>
+                  <span className="text-white/40 tabular-nums md:hidden">{day.low}°</span>
                 )}
               </div>
             ))}
@@ -171,9 +172,9 @@ export function Weather({ zip = '22314' }: WeatherProps) {
         </div>
       </div>
 
-      {/* Right: Radar */}
+      {/* Radar — bottom on mobile, right side on desktop */}
       <div
-        className="w-full h-40 md:w-28 md:h-full relative bg-black shrink-0 overflow-hidden cursor-pointer"
+        className="w-full h-40 md:w-auto md:h-full md:flex-1 relative bg-black shrink-0 overflow-hidden cursor-pointer"
         onClick={toggleRadar}
       >
         {mapUrl && (
@@ -181,7 +182,7 @@ export function Weather({ zip = '22314' }: WeatherProps) {
             src={mapUrl}
             alt=""
             aria-hidden="true"
-            className="absolute inset-0 w-full h-full object-cover opacity-50"
+            className="absolute inset-0 w-full h-full object-cover opacity-80"
           />
         )}
         {radarUrl && (
