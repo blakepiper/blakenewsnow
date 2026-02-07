@@ -11,5 +11,4 @@ export { UnifiedFeed } from './UnifiedFeed';
 export { FeedItem } from './FeedItem';
 export { Sidebar } from './Sidebar';
 export { BottomTabBar } from './BottomTabBar';
-export { Globe } from './Globe';
 export type { FilterType } from './FilterPills';
