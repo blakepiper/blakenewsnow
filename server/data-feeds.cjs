@@ -14,6 +14,51 @@ function stableId(prefix, title, source) {
 }
 
 // ============================================
+// CNN junk filter — removes ads, promos, and non-news content
+// ============================================
+const CNN_JUNK_URL_PATTERNS = [
+  '/cnn-underscored/',    // Affiliate product ads
+  '/style/',              // Fashion/beauty
+  '/travel/',             // Travel fluff
+  '/audio/podcasts/',     // Podcast promos
+  '/interactive/',        // Interactive features / promos
+  '/specials/',           // CNN specials / sponsored sections
+];
+
+const CNN_JUNK_TITLE_PATTERNS = [
+  /^opinion:/i,
+  /^sponsored:/i,
+  /^paid content:/i,
+  /^podcast:/i,
+  /^cnn underscored/i,
+  /^ad:/i,
+  /\bunderscored\b/i,
+  /\bsponsored\b/i,
+  /\bpaid partner\b/i,
+  /\bcnn\+?\s*exclusive\s*preview/i,
+];
+
+function isCNNJunk(item) {
+  const link = (item.link || '').toLowerCase();
+  const title = (item.title || '').toLowerCase();
+
+  // Filter by URL path — non-news CNN sections
+  for (const pattern of CNN_JUNK_URL_PATTERNS) {
+    if (link.includes(pattern)) return true;
+  }
+
+  // Video-only clips (URLs ending in .cnn are clip pages, not articles)
+  if (link.match(/\/videos\/.*\.cnn$/)) return true;
+
+  // Filter by title patterns
+  for (const pattern of CNN_JUNK_TITLE_PATTERNS) {
+    if (pattern.test(item.title || '')) return true;
+  }
+
+  return false;
+}
+
+// ============================================
 // RSS Feed Configuration
 // ============================================
 const RSS_FEEDS = {
@@ -28,7 +73,7 @@ const RSS_FEEDS = {
     { name: 'Reuters', url: 'https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best' },
     { name: 'Associated Press', url: 'https://rsshub.app/apnews/topics/apf-topnews' },
     { name: 'Washington Post', url: 'https://feeds.washingtonpost.com/rss/national' },
-    { name: 'CNN', url: 'http://rss.cnn.com/rss/cnn_topstories.rss' },
+    { name: 'CNN', url: 'http://rss.cnn.com/rss/cnn_topstories.rss', filter: (item) => !isCNNJunk(item) },
     { name: 'Fox News', url: 'https://moxie.foxnews.com/google-publisher/us.xml' },
     { name: 'Politico', url: 'https://rss.politico.com/politics-news.xml' },
     { name: 'The Intercept', url: 'https://theintercept.com/feed/' },
@@ -236,7 +281,14 @@ async function fetchHeadlines() {
     RSS_FEEDS.headlines.map(async (feed) => {
       try {
         const { data } = await fetch(feed.url, { accept: 'application/rss+xml, application/xml, text/xml' });
-        const items = parseRSS(data, feed.name);
+        let items = parseRSS(data, feed.name);
+        if (feed.filter) {
+          const before = items.length;
+          items = items.filter(feed.filter);
+          if (items.length < before) {
+            console.log(`[DATA] ${feed.name}: filtered ${before - items.length} junk items`);
+          }
+        }
         console.log(`[DATA] ${feed.name}: ${items.length} items`);
         return items;
       } catch (err) {
