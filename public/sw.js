@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bnn-cache-v5';
+const CACHE_NAME = 'bnn-cache-v6';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
