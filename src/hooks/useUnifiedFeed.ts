@@ -87,8 +87,11 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
   const fetchAll = useCallback(async () => {
     const requestSequence = ++requestSequenceRef.current;
     try {
+      const headlineParams = new URLSearchParams({
+        sources: [...enabledSources].sort().join(','),
+      });
       const [headlinesRes, techRes, lemmyRes, hnRes, chanRes] = await Promise.all([
-        fetch(`${API_BASE}/api/headlines`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/headlines?${headlineParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/tech`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/lemmy`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/hackernews`).then(r => r.ok ? r.json() : []).catch(() => []),

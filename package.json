@@ -7,9 +7,10 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "concurrently \"npm run server\" \"npm run dev\"",
+    "start": "concurrently \"npm run server:watch\" \"npm run dev\"",
     "dev": "vite",
     "server": "node server/proxy.cjs",
+    "server:watch": "node --watch server/proxy.cjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

@@ -53,6 +53,7 @@ The server applies the following rules before a headline can reach the display:
 - Sort by publication time, newest first.
 - Deduplicate repeated titles.
 - Cap each publisher's initial contribution so high-volume feeds cannot monopolize the result.
+- Apply source selections before the response limit so narrow publisher filters cannot return an empty feed.
 - Coalesce simultaneous requests so several open clients do not stampede upstream feeds.
 
 The client repeats the date, link, and freshness checks as a second line of defense. On desktop, the two-column feed uses row-major order: ranks 1 and 2 share the first row, ranks 3 and 4 share the second, and so on.
@@ -66,6 +67,7 @@ local settings: drag the divider beside the dashboard or the handles below its p
 ```bash
 npm start          # API and Vite development server
 npm run server     # API only
+npm run server:watch # API only, restarting when server files change
 npm run dev        # frontend only
 npm run build      # TypeScript and production bundle
 npm run lint

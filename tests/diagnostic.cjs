@@ -317,6 +317,34 @@ async function runTests() {
     validateSourceDiversity(),
   ]);
 
+  const selectedPublishers = ['Bloomberg', 'Financial Times', 'Wall Street Journal'];
+  await testEndpoint(
+    'Selected financial publishers',
+    `/api/headlines?sources=${encodeURIComponent(selectedPublishers.join(','))}`,
+    [
+      validateArray(3),
+      validateFields(['id', 'title', 'source', 'timestamp']),
+      validateTimestamps(),
+      (data, name) => {
+        if (!Array.isArray(data)) return;
+        const unexpected = data.filter(item => !selectedPublishers.includes(item.source));
+        const missing = selectedPublishers.filter(
+          source => !data.some(item => item.source === source)
+        );
+        if (unexpected.length > 0) {
+          fail(`${name} selection`, `${unexpected.length} stories came from unselected publishers`);
+        } else {
+          pass(`${name} excludes unselected publishers`);
+        }
+        if (missing.length > 0) {
+          fail(`${name} coverage`, `No current stories from ${missing.join(', ')}`);
+        } else {
+          pass(`${name} includes all selected publishers`);
+        }
+      },
+    ]
+  );
+
   // Test Lemmy
   log('\n[3/8] Lemmy API', 'cyan');
   await testEndpoint('Lemmy', '/api/lemmy', [

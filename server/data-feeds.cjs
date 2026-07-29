@@ -240,7 +240,7 @@ function stripHtml(str) {
 // ============================================
 // Fetch Headlines
 // ============================================
-async function fetchHeadlines() {
+async function loadHeadlinePool() {
   if (isCacheValid('headlines')) {
     return cache.headlines.data;
   }
@@ -290,7 +290,7 @@ async function fetchHeadlines() {
     return true;
   });
 
-  const result = selectDiverseItems(unique, 50, 5).map((item) => ({
+  const result = unique.map((item) => ({
     id: stableId('headline', item.title, item.source),
     title: item.title,
     source: item.source,
@@ -301,6 +301,30 @@ async function fetchHeadlines() {
 
   cache.headlines = { data: result, timestamp: Date.now() };
   return result;
+}
+
+function selectHeadlineItems(items, requestedSources = null) {
+  const eligible = requestedSources === null
+    ? items
+    : items.filter(item => requestedSources.has(item.source));
+  return selectDiverseItems(eligible, 50, 5);
+}
+
+async function fetchHeadlines(requestedSources = null) {
+  const pool = await dedupeRequest('headline-pool', loadHeadlinePool);
+  return selectHeadlineItems(pool, requestedSources);
+}
+
+function parseRequestedHeadlineSources(value) {
+  if (value === undefined) return null;
+  const allowedSources = new Set(RSS_FEEDS.headlines.map(feed => feed.name));
+  const raw = Array.isArray(value) ? value.join(',') : String(value);
+  return new Set(
+    raw
+      .split(',')
+      .map(source => source.trim())
+      .filter(source => allowedSources.has(source))
+  );
 }
 
 // ============================================
@@ -1385,7 +1409,8 @@ async function fetchFourChan() {
 function registerRoutes(app) {
   app.get('/api/headlines', async (req, res) => {
     try {
-      const data = await dedupeRequest('headlines', fetchHeadlines);
+      const requestedSources = parseRequestedHeadlineSources(req.query.sources);
+      const data = await fetchHeadlines(requestedSources);
       res.json(data);
     } catch (err) {
       console.error('[API] Headlines error:', err);
@@ -1510,6 +1535,7 @@ module.exports = {
   RSS_FEEDS,
   normalizePolymarketMarket,
   selectDiverseItems,
+  selectHeadlineItems,
   registerRoutes,
   fetchHeadlines,
   fetchTicker,

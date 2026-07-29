@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { selectDiverseItems } = require('../server/data-feeds.cjs');
+const { selectDiverseItems, selectHeadlineItems } = require('../server/data-feeds.cjs');
 
 function item(source, id) {
   return { source, id };
@@ -41,4 +41,22 @@ test('fills unused slots when the source pool is too small for the cap', () => {
 
   assert.equal(result.length, 5);
   assert.deepEqual(result.map(entry => entry.id), [1, 2, 5, 3, 4]);
+});
+
+test('filters requested headline publishers before applying the response limit', () => {
+  const input = [
+    ...Array.from({ length: 50 }, (_, index) => item('Other', index)),
+    item('Bloomberg', 51),
+    item('Financial Times', 52),
+    item('Wall Street Journal', 53),
+  ];
+  const requested = new Set(['Bloomberg', 'Financial Times', 'Wall Street Journal']);
+
+  const result = selectHeadlineItems(input, requested);
+
+  assert.deepEqual(result.map(entry => entry.id), [51, 52, 53]);
+});
+
+test('returns no headlines when the client explicitly selects no news publishers', () => {
+  assert.deepEqual(selectHeadlineItems([item('Bloomberg', 1)], new Set()), []);
 });
