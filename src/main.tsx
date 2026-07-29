@@ -1,7 +1,9 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
+import { StrictMode } from 'react';
+import ReactDOM from 'react-dom';
+import { CssBaseline, StylesProvider, ThemeProvider } from '@material-ui/core';
+import './index.css';
+import App from './App.tsx';
+import { theme } from './theme';
 
 // Register service worker for PWA
 if ('serviceWorker' in navigator) {
@@ -12,8 +14,14 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-createRoot(document.getElementById('root')!).render(
+ReactDOM.render(
   <StrictMode>
-    <App />
+    <StylesProvider injectFirst>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <App />
+      </ThemeProvider>
+    </StylesProvider>
   </StrictMode>,
-)
+  document.getElementById('root'),
+);

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   Weather,
   Financial,
@@ -23,9 +23,6 @@ function App() {
     settings,
     toggleSource,
     updateLocation,
-    addCustomFeed,
-    removeCustomFeed,
-    setLayout,
     addToReadingList,
     removeFromReadingList,
     isInReadingList,
@@ -42,7 +39,15 @@ function App() {
   const [activeView, setActiveView] = useState<MobileView>('feed');
 
   // Unified feed
-  const { items, loading, error, newItemIds, refresh } = useUnifiedFeed();
+  const enabledSources = useMemo(
+    () => new Set(
+      settings.sources
+        .filter(source => source.enabled)
+        .flatMap(source => source.apiSources || [source.name])
+    ),
+    [settings.sources]
+  );
+  const { items, loading, error, newItemIds, refresh } = useUnifiedFeed(enabledSources);
 
   // Filter items for search (flat list for search compatibility)
   const allHeadlines = items.map(item => ({
@@ -272,9 +277,6 @@ function App() {
           onClose={() => setShowSettings(false)}
           onToggleSource={toggleSource}
           onUpdateLocation={updateLocation}
-          onAddCustomFeed={addCustomFeed}
-          onRemoveCustomFeed={removeCustomFeed}
-          onSetLayout={setLayout}
         />
       )}
     </div>

@@ -89,7 +89,7 @@ export function Ticker() {
 
             {/* Source */}
             <span className="text-white/40 text-[10px] ml-1.5">
-              — {item.source}
+              - {item.source}
             </span>
           </div>
         ))}

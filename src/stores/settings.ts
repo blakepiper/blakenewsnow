@@ -8,6 +8,7 @@ export interface SourceConfig {
   enabled: boolean;
   category: 'news' | 'tech' | 'social' | 'finance' | 'custom';
   priority: number;
+  apiSources?: string[];
   url?: string;
 }
 
@@ -46,19 +47,30 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'abc', name: 'ABC News', enabled: true, category: 'news', priority: 5 },
   { id: 'cbs', name: 'CBS News', enabled: true, category: 'news', priority: 6 },
   { id: 'nytimes', name: 'NY Times', enabled: true, category: 'news', priority: 7 },
-  { id: 'reuters', name: 'Reuters', enabled: true, category: 'news', priority: 8 },
-  { id: 'ap', name: 'Associated Press', enabled: true, category: 'news', priority: 9 },
+  { id: 'pbs', name: 'PBS NewsHour', enabled: true, category: 'news', priority: 8 },
+  { id: 'nbc', name: 'NBC News', enabled: true, category: 'news', priority: 9 },
+  { id: 'axios', name: 'Axios', enabled: true, category: 'news', priority: 10 },
+  { id: 'thehill', name: 'The Hill', enabled: true, category: 'news', priority: 11 },
+  { id: 'vox', name: 'Vox', enabled: true, category: 'news', priority: 12 },
+  { id: 'fox', name: 'Fox News', enabled: true, category: 'news', priority: 13 },
+  { id: 'politico', name: 'Politico', enabled: true, category: 'news', priority: 14 },
+  { id: 'intercept', name: 'The Intercept', enabled: true, category: 'news', priority: 15 },
+  { id: 'propublica', name: 'ProPublica', enabled: true, category: 'news', priority: 16 },
+  { id: 'foreignpolicy', name: 'Foreign Policy', enabled: true, category: 'news', priority: 17 },
+  { id: 'breitbart', name: 'Breitbart', enabled: true, category: 'news', priority: 18 },
   // Tech
-  { id: 'hackernews', name: 'Hacker News', enabled: true, category: 'tech', priority: 10 },
-  { id: 'arstechnica', name: 'Ars Technica', enabled: true, category: 'tech', priority: 11 },
-  { id: 'theverge', name: 'The Verge', enabled: true, category: 'tech', priority: 12 },
-  { id: 'techcrunch', name: 'TechCrunch', enabled: true, category: 'tech', priority: 13 },
-  { id: 'wired', name: 'Wired', enabled: true, category: 'tech', priority: 14 },
-  { id: 'lobsters', name: 'Lobsters', enabled: true, category: 'tech', priority: 15 },
+  { id: 'hackernews', name: 'Hacker News', enabled: true, category: 'tech', priority: 19 },
+  { id: 'arstechnica', name: 'Ars Technica', enabled: true, category: 'tech', priority: 20 },
+  { id: 'theverge', name: 'The Verge', enabled: true, category: 'tech', priority: 21 },
+  { id: 'techcrunch', name: 'TechCrunch', enabled: true, category: 'tech', priority: 22 },
+  { id: 'wired', name: 'Wired', enabled: true, category: 'tech', priority: 23 },
+  { id: 'lobsters', name: 'Lobsters', enabled: true, category: 'tech', priority: 24 },
   // Social
-  { id: 'reddit-news', name: 'Reddit r/news', enabled: true, category: 'social', priority: 16 },
-  { id: 'reddit-worldnews', name: 'Reddit r/worldnews', enabled: true, category: 'social', priority: 17 },
-  { id: 'reddit-technology', name: 'Reddit r/technology', enabled: true, category: 'social', priority: 18 },
+  { id: 'reddit-news', name: 'Reddit r/news', apiSources: ['r/news'], enabled: true, category: 'social', priority: 25 },
+  { id: 'reddit-worldnews', name: 'Reddit r/worldnews', apiSources: ['r/worldnews'], enabled: true, category: 'social', priority: 26 },
+  { id: 'reddit-technology', name: 'Reddit r/technology', apiSources: ['r/technology'], enabled: true, category: 'social', priority: 27 },
+  { id: '4chan-news', name: '4chan /news/', apiSources: ['/news/'], enabled: true, category: 'social', priority: 28 },
+  { id: '4chan-pol', name: '4chan /pol/', apiSources: ['/pol/'], enabled: true, category: 'social', priority: 29 },
 ];
 
 const DEFAULT_SETTINGS: Settings = {

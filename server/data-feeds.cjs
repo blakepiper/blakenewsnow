@@ -7,55 +7,11 @@ const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
+const { filterRecentItems, parseRSS } = require('./rss.cjs');
 
 function stableId(prefix, title, source) {
   const hash = crypto.createHash('md5').update(`${source}:${title}`).digest('hex').slice(0, 10);
   return `${prefix}-${hash}`;
-}
-
-// ============================================
-// CNN junk filter — removes ads, promos, and non-news content
-// ============================================
-const CNN_JUNK_URL_PATTERNS = [
-  '/cnn-underscored/',    // Affiliate product ads
-  '/style/',              // Fashion/beauty
-  '/travel/',             // Travel fluff
-  '/audio/podcasts/',     // Podcast promos
-  '/interactive/',        // Interactive features / promos
-  '/specials/',           // CNN specials / sponsored sections
-];
-
-const CNN_JUNK_TITLE_PATTERNS = [
-  /^opinion:/i,
-  /^sponsored:/i,
-  /^paid content:/i,
-  /^podcast:/i,
-  /^cnn underscored/i,
-  /^ad:/i,
-  /\bunderscored\b/i,
-  /\bsponsored\b/i,
-  /\bpaid partner\b/i,
-  /\bcnn\+?\s*exclusive\s*preview/i,
-];
-
-function isCNNJunk(item) {
-  const link = (item.link || '').toLowerCase();
-  const title = (item.title || '').toLowerCase();
-
-  // Filter by URL path — non-news CNN sections
-  for (const pattern of CNN_JUNK_URL_PATTERNS) {
-    if (link.includes(pattern)) return true;
-  }
-
-  // Video-only clips (URLs ending in .cnn are clip pages, not articles)
-  if (link.match(/\/videos\/.*\.cnn$/)) return true;
-
-  // Filter by title patterns
-  for (const pattern of CNN_JUNK_TITLE_PATTERNS) {
-    if (pattern.test(item.title || '')) return true;
-  }
-
-  return false;
 }
 
 // ============================================
@@ -70,17 +26,17 @@ const RSS_FEEDS = {
     { name: 'ABC News', url: 'https://abcnews.go.com/abcnews/topstories' },
     { name: 'CBS News', url: 'https://www.cbsnews.com/latest/rss/main' },
     { name: 'NY Times', url: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
-    { name: 'Reuters', url: 'https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best' },
-    { name: 'Associated Press', url: 'https://rsshub.app/apnews/topics/apf-topnews' },
-    { name: 'Washington Post', url: 'https://feeds.washingtonpost.com/rss/national' },
-    { name: 'CNN', url: 'http://rss.cnn.com/rss/cnn_topstories.rss', filter: (item) => !isCNNJunk(item) },
+    { name: 'PBS NewsHour', url: 'https://www.pbs.org/newshour/feeds/rss/headlines' },
+    { name: 'NBC News', url: 'https://feeds.nbcnews.com/nbcnews/public/news' },
+    { name: 'Axios', url: 'https://api.axios.com/feed/' },
+    { name: 'The Hill', url: 'https://thehill.com/feed/' },
+    { name: 'Vox', url: 'https://www.vox.com/rss/index.xml' },
     { name: 'Fox News', url: 'https://moxie.foxnews.com/google-publisher/us.xml' },
     { name: 'Politico', url: 'https://rss.politico.com/politics-news.xml' },
     { name: 'The Intercept', url: 'https://theintercept.com/feed/' },
     { name: 'ProPublica', url: 'http://feeds.propublica.org/propublica/main' },
     { name: 'Foreign Policy', url: 'https://foreignpolicy.com/feed/' },
     { name: 'Breitbart', url: 'https://feeds.feedburner.com/breitbart' },
-    { name: 'Daily Wire', url: 'https://www.dailywire.com/rss.xml' },
   ],
   tech: [
     { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
@@ -131,10 +87,27 @@ const CACHE_TTL = {
   weather: 5 * 60 * 1000, // 5 minutes
   radar: 2 * 60 * 1000,   // 2 minutes
   predictions: 60 * 1000, // 1 minute
-  reddit: 2 * 60 * 1000,  // 2 minutes
+  reddit: 5 * 60 * 1000,  // 5 minutes; Reddit throttles anonymous RSS aggressively
   hackernews: 2 * 60 * 1000, // 2 minutes
   fourchan: 2 * 60 * 1000,   // 2 minutes
 };
+
+const CONTENT_MAX_AGE = {
+  headlines: 7 * 24 * 60 * 60 * 1000,
+  tech: 7 * 24 * 60 * 60 * 1000,
+  ticker: 2 * 24 * 60 * 60 * 1000,
+};
+
+const inFlightRequests = new Map();
+
+function dedupeRequest(key, loader) {
+  if (inFlightRequests.has(key)) return inFlightRequests.get(key);
+  const request = Promise.resolve()
+    .then(loader)
+    .finally(() => inFlightRequests.delete(key));
+  inFlightRequests.set(key, request);
+  return request;
+}
 
 // Default location (Alexandria, VA - zip 22314)
 const DEFAULT_ZIP = '22314';
@@ -162,7 +135,7 @@ function fetch(url, options = {}, redirectCount = 0) {
     // Special User-Agent for Reddit (they block generic ones)
     const isReddit = parsedUrl.hostname.includes('reddit.com');
     const userAgent = isReddit
-      ? 'BlakeNewsNow/1.0 (News Aggregator; Contact: github.com/blakenewsnow)'
+      ? 'BlakeNewsNow/1.0 by u/blake'
       : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
     const reqOptions = {
@@ -208,49 +181,6 @@ function fetch(url, options = {}, redirectCount = 0) {
   });
 }
 
-// ============================================
-// RSS Parser (simple XML extraction)
-// ============================================
-function parseRSS(xml, sourceName) {
-  const items = [];
-
-  // Extract items from RSS or Atom feeds
-  const itemRegex = /<item>([\s\S]*?)<\/item>|<entry>([\s\S]*?)<\/entry>/gi;
-  let match;
-
-  while ((match = itemRegex.exec(xml)) !== null) {
-    const content = match[1] || match[2];
-
-    // Extract title
-    const titleMatch = content.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
-    const title = titleMatch ? decodeEntities(titleMatch[1].trim()) : null;
-
-    // Extract link
-    const linkMatch = content.match(/<link[^>]*>([^<]+)<\/link>|<link[^>]*href="([^"]+)"/i);
-    const link = linkMatch ? (linkMatch[1] || linkMatch[2]) : null;
-
-    // Extract pubDate
-    const dateMatch = content.match(/<pubDate>([^<]+)<\/pubDate>|<published>([^<]+)<\/published>|<updated>([^<]+)<\/updated>/i);
-    const pubDate = dateMatch ? new Date(dateMatch[1] || dateMatch[2] || dateMatch[3]) : new Date();
-
-    // Extract description/summary
-    const descMatch = content.match(/<description[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>|<summary[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/summary>/i);
-    const description = descMatch ? decodeEntities(stripHtml(descMatch[1] || descMatch[2] || '').substring(0, 200)) : '';
-
-    if (title) {
-      items.push({
-        title,
-        link,
-        pubDate,
-        description,
-        source: sourceName,
-      });
-    }
-  }
-
-  return items;
-}
-
 function decodeEntities(str) {
   return str
     .replace(/&amp;/g, '&')
@@ -281,7 +211,11 @@ async function fetchHeadlines() {
     RSS_FEEDS.headlines.map(async (feed) => {
       try {
         const { data } = await fetch(feed.url, { accept: 'application/rss+xml, application/xml, text/xml' });
-        let items = parseRSS(data, feed.name);
+        const parsedItems = parseRSS(data, feed.name);
+        let items = filterRecentItems(parsedItems, { maxAgeMs: CONTENT_MAX_AGE.headlines });
+        if (items.length < parsedItems.length) {
+          console.log(`[DATA] ${feed.name}: dropped ${parsedItems.length - items.length} stale, undated, or invalid items`);
+        }
         if (feed.filter) {
           const before = items.length;
           items = items.filter(feed.filter);
@@ -339,7 +273,7 @@ async function fetchTicker() {
     RSS_FEEDS.ticker.map(async (feed) => {
       try {
         const { data } = await fetch(feed.url, { accept: 'application/rss+xml, application/xml, text/xml' });
-        return parseRSS(data, feed.name);
+        return filterRecentItems(parseRSS(data, feed.name), { maxAgeMs: CONTENT_MAX_AGE.ticker });
       } catch (err) {
         console.error(`[DATA] Ticker ${feed.name} failed:`, err.message);
         return [];
@@ -1073,7 +1007,8 @@ async function fetchTechNews() {
     RSS_FEEDS.tech.map(async (feed) => {
       try {
         const { data } = await fetch(feed.url, { accept: 'application/rss+xml, application/xml, text/xml' });
-        const items = parseRSS(data, feed.name);
+        const parsedItems = parseRSS(data, feed.name);
+        const items = filterRecentItems(parsedItems, { maxAgeMs: CONTENT_MAX_AGE.tech });
         console.log(`[DATA] ${feed.name}: ${items.length} items`);
         return items;
       } catch (err) {
@@ -1118,72 +1053,44 @@ async function fetchReddit() {
 
   console.log('[DATA] Fetching Reddit...');
 
-  const results = [];
+  try {
+    // One combined Atom request avoids the 403s and 429s caused by three
+    // anonymous JSON requests. OAuth can be added later if scores are needed.
+    const joinedSubreddits = REDDIT_SUBREDDITS.join('+');
+    const url = `https://www.reddit.com/r/${joinedSubreddits}/.rss?limit=75`;
+    const { data } = await fetch(url, {
+      headers: {
+        'Accept': 'application/atom+xml, application/xml, text/xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      timeout: 10000,
+    });
 
-  // Fetch all subreddits in parallel
-  const subredditResults = await Promise.allSettled(
-    REDDIT_SUBREDDITS.map(async (subreddit) => {
-      const url = `https://old.reddit.com/r/${subreddit}/hot.json?limit=15&raw_json=1`;
-      const { data } = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-        timeout: 10000,
-      });
+    const parsedItems = filterRecentItems(parseRSS(data, 'Reddit'), {
+      maxAgeMs: CONTENT_MAX_AGE.headlines,
+    });
+    const result = parsedItems.slice(0, 45).map(item => {
+      const subreddit = item.link.match(/reddit\.com\/r\/([^/]+)/i)?.[1] || 'news';
+      return {
+        id: stableId('reddit', item.title, subreddit),
+        title: item.title,
+        source: `r/${subreddit}`,
+        subreddit,
+        url: item.link,
+        permalink: item.link,
+        timestamp: item.pubDate.toISOString(),
+      };
+    });
 
-      const json = JSON.parse(data);
-      const posts = json.data?.children || [];
-      const items = [];
-
-      for (const post of posts) {
-        const d = post.data;
-        if (d.stickied) continue;
-
-        items.push({
-          id: d.id,
-          title: d.title,
-          source: `r/${subreddit}`,
-          subreddit,
-          score: d.score,
-          comments: d.num_comments,
-          url: d.url,
-          permalink: `https://reddit.com${d.permalink}`,
-          timestamp: new Date(d.created_utc * 1000).toISOString(),
-          isExternal: !d.is_self,
-          thumbnail: d.thumbnail && d.thumbnail.startsWith('http') ? d.thumbnail : null,
-        });
-      }
-      console.log(`[REDDIT] r/${subreddit}: ${items.length} posts`);
-      return items;
-    })
-  );
-
-  for (let i = 0; i < subredditResults.length; i++) {
-    const result = subredditResults[i];
-    if (result.status === 'fulfilled') {
-      results.push(...result.value);
-    } else {
-      console.error(`[REDDIT] r/${REDDIT_SUBREDDITS[i]} failed:`, result.reason?.message || result.reason);
+    console.log(`[REDDIT] Combined feed: ${result.length} posts`);
+    if (result.length > 0) {
+      cache.reddit = { data: result, timestamp: Date.now() };
     }
+    return result;
+  } catch (err) {
+    console.error('[REDDIT]', err.message);
+    return cache.reddit.data || [];
   }
-
-  // Sort by score and recency
-  results.sort((a, b) => {
-    const scoreWeight = 0.7;
-    const timeWeight = 0.3;
-    const aAge = (Date.now() - new Date(a.timestamp).getTime()) / 3600000; // hours
-    const bAge = (Date.now() - new Date(b.timestamp).getTime()) / 3600000;
-    const aScore = (a.score / 1000) * scoreWeight - aAge * timeWeight;
-    const bScore = (b.score / 1000) * scoreWeight - bAge * timeWeight;
-    return bScore - aScore;
-  });
-
-  const result = results.slice(0, 30);
-  if (result.length > 0) {
-    cache.reddit = { data: result, timestamp: Date.now() };
-  }
-  return result;
 }
 
 // ============================================
@@ -1315,7 +1222,7 @@ async function fetchFourChan() {
 function registerRoutes(app) {
   app.get('/api/headlines', async (req, res) => {
     try {
-      const data = await fetchHeadlines();
+      const data = await dedupeRequest('headlines', fetchHeadlines);
       res.json(data);
     } catch (err) {
       console.error('[API] Headlines error:', err);
@@ -1325,7 +1232,7 @@ function registerRoutes(app) {
 
   app.get('/api/ticker', async (req, res) => {
     try {
-      const data = await fetchTicker();
+      const data = await dedupeRequest('ticker', fetchTicker);
       res.json(data);
     } catch (err) {
       console.error('[API] Ticker error:', err);
@@ -1335,7 +1242,7 @@ function registerRoutes(app) {
 
   app.get('/api/markets', async (req, res) => {
     try {
-      const data = await fetchMarkets();
+      const data = await dedupeRequest('markets', fetchMarkets);
       res.json(data);
     } catch (err) {
       console.error('[API] Markets error:', err);
@@ -1345,7 +1252,7 @@ function registerRoutes(app) {
 
   app.get('/api/crypto', async (req, res) => {
     try {
-      const data = await fetchCrypto();
+      const data = await dedupeRequest('crypto', fetchCrypto);
       res.json(data);
     } catch (err) {
       console.error('[API] Crypto error:', err);
@@ -1356,7 +1263,10 @@ function registerRoutes(app) {
   app.get('/api/weather', async (req, res) => {
     try {
       const zip = req.query.zip || DEFAULT_ZIP;
-      const data = await fetchWeather(zip);
+      if (typeof zip !== 'string' || !/^\d{5}$/.test(zip)) {
+        return res.status(400).json({ error: 'ZIP code must contain five digits' });
+      }
+      const data = await dedupeRequest(`weather:${zip}`, () => fetchWeather(zip));
       if (!data) {
         return res.status(503).json({ error: 'Weather data unavailable' });
       }
@@ -1369,7 +1279,7 @@ function registerRoutes(app) {
 
   app.get('/api/radar', async (req, res) => {
     try {
-      const data = await fetchRadarData();
+      const data = await dedupeRequest('radar', fetchRadarData);
       if (!data) {
         return res.status(503).json({ error: 'Radar data unavailable' });
       }
@@ -1382,7 +1292,7 @@ function registerRoutes(app) {
 
   app.get('/api/predictions', async (req, res) => {
     try {
-      const data = await fetchPredictions();
+      const data = await dedupeRequest('predictions', fetchPredictions);
       res.json(data);
     } catch (err) {
       console.error('[API] Predictions error:', err);
@@ -1392,7 +1302,7 @@ function registerRoutes(app) {
 
   app.get('/api/reddit', async (req, res) => {
     try {
-      const data = await fetchReddit();
+      const data = await dedupeRequest('reddit', fetchReddit);
       res.json(data);
     } catch (err) {
       console.error('[API] Reddit error:', err);
@@ -1402,7 +1312,7 @@ function registerRoutes(app) {
 
   app.get('/api/hackernews', async (req, res) => {
     try {
-      const data = await fetchHackerNews();
+      const data = await dedupeRequest('hackernews', fetchHackerNews);
       res.json(data);
     } catch (err) {
       console.error('[API] Hacker News error:', err);
@@ -1412,7 +1322,7 @@ function registerRoutes(app) {
 
   app.get('/api/4chan', async (req, res) => {
     try {
-      const data = await fetchFourChan();
+      const data = await dedupeRequest('fourchan', fetchFourChan);
       res.json(data);
     } catch (err) {
       console.error('[API] 4chan error:', err);
@@ -1422,7 +1332,7 @@ function registerRoutes(app) {
 
   app.get('/api/tech', async (req, res) => {
     try {
-      const data = await fetchTechNews();
+      const data = await dedupeRequest('tech', fetchTechNews);
       res.json(data);
     } catch (err) {
       console.error('[API] Tech news error:', err);

@@ -16,8 +16,8 @@ interface RawRedditPost {
   title: string;
   source: string;
   subreddit: string;
-  score: number;
-  comments: number;
+  score?: number;
+  comments?: number;
   url: string;
   permalink: string;
   timestamp: string;
@@ -70,14 +70,19 @@ function getDomain(url: string): string {
   }
 }
 
-export function useUnifiedFeed() {
+const MAX_FEED_ITEM_AGE = 7 * 24 * 60 * 60 * 1000;
+
+export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
   const prevItemIdsRef = useRef<Set<string>>(new Set());
+  const newItemsTimerRef = useRef<number | null>(null);
+  const requestSequenceRef = useRef(0);
 
   const fetchAll = useCallback(async () => {
+    const requestSequence = ++requestSequenceRef.current;
     try {
       const [headlinesRes, techRes, redditRes, hnRes, chanRes] = await Promise.all([
         fetch(`${API_BASE}/api/headlines`).then(r => r.ok ? r.json() : []).catch(() => []),
@@ -162,17 +167,29 @@ export function useUnifiedFeed() {
         });
       });
 
-      // Sort by timestamp descending
-      feedItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      // Treat the client as a second line of defense against invalid upstream data.
+      const now = Date.now();
+      const validItems = feedItems.filter(item => {
+        const timestamp = new Date(item.timestamp).getTime();
+        return enabledSources.has(item.source)
+          && item.link
+          && Number.isFinite(timestamp)
+          && timestamp <= now + 15 * 60 * 1000
+          && timestamp >= now - MAX_FEED_ITEM_AGE;
+      });
+
+      validItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
       // Deduplicate across sources
       const deduped: FeedItem[] = [];
-      for (const item of feedItems) {
+      for (const item of validItems) {
         const isDuplicate = deduped.some(existing => titlesMatch(existing.title, item.title));
         if (!isDuplicate) {
           deduped.push(item);
         }
       }
+
+      if (requestSequence !== requestSequenceRef.current) return;
 
       // Track new items
       const currentIds = new Set(deduped.map(i => i.id));
@@ -185,32 +202,37 @@ export function useUnifiedFeed() {
         }
         if (newIds.size > 0) {
           setNewItemIds(newIds);
-          setTimeout(() => setNewItemIds(new Set()), 3000);
+          if (newItemsTimerRef.current) clearTimeout(newItemsTimerRef.current);
+          newItemsTimerRef.current = window.setTimeout(() => {
+            setNewItemIds(new Set());
+            newItemsTimerRef.current = null;
+          }, 3000);
         }
       }
       prevItemIdsRef.current = currentIds;
 
-      // Mark new items
-      const finalItems = deduped.map(item => ({
-        ...item,
-        isNew: newItemIds.has(item.id),
-      }));
-
-      setItems(finalItems);
+      setItems(deduped);
       setError(null);
     } catch (err) {
       console.error('Unified feed fetch error:', err);
-      setError('Unable to load feed');
+      if (requestSequence === requestSequenceRef.current) {
+        setError('Unable to load feed');
+      }
     } finally {
-      setLoading(false);
+      if (requestSequence === requestSequenceRef.current) {
+        setLoading(false);
+      }
     }
-  }, [newItemIds]);
+  }, [enabledSources]);
 
   useEffect(() => {
     fetchAll();
     const interval = setInterval(fetchAll, REFRESH_INTERVALS.headlines);
-    return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      clearInterval(interval);
+      if (newItemsTimerRef.current) clearTimeout(newItemsTimerRef.current);
+    };
+  }, [fetchAll]);
 
   const refresh = useCallback(() => {
     setLoading(true);

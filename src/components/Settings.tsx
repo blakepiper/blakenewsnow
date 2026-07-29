@@ -1,4 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  IconButton,
+  Switch,
+  Tab,
+  Tabs,
+  TextField,
+  Typography,
+} from '@material-ui/core';
+import { makeStyles } from '@material-ui/core/styles';
+import CloseIcon from '@material-ui/icons/Close';
 import type { Settings as SettingsType, SourceConfig } from '../stores/settings';
 import { UI_TIMING } from '../config';
 
@@ -7,30 +24,179 @@ interface SettingsProps {
   onClose: () => void;
   onToggleSource: (sourceId: string) => void;
   onUpdateLocation: (zip: string, city: string) => void;
-  onAddCustomFeed: (name: string, url: string) => void;
-  onRemoveCustomFeed: (feedId: string) => void;
-  onSetLayout: (layout: 'compact' | 'dashboard') => void;
 }
 
-type Tab = 'sources' | 'location' | 'custom' | 'display';
+type TabId = 'sources' | 'location' | 'display';
+
+const useStyles = makeStyles(theme => ({
+  paper: {
+    width: '100%',
+    minHeight: 460,
+    maxHeight: '82vh',
+    backgroundImage: 'none',
+    border: `1px solid ${theme.palette.divider}`,
+    boxShadow: '0 24px 80px rgba(1, 5, 8, 0.62)',
+    [theme.breakpoints.down('xs')]: {
+      height: '100%',
+      maxHeight: 'none',
+      margin: 0,
+      border: 0,
+      borderRadius: 0,
+    },
+  },
+  titleBar: {
+    display: 'flex',
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '10px 14px 8px 16px',
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: 600,
+    letterSpacing: '-0.02em',
+  },
+  closeButton: {
+    color: theme.palette.text.secondary,
+    '&:hover': {
+      color: theme.palette.text.primary,
+      backgroundColor: 'rgba(225, 235, 242, 0.07)',
+    },
+  },
+  tabs: {
+    minHeight: 38,
+    borderBottom: `1px solid ${theme.palette.divider}`,
+  },
+  tab: {
+    minHeight: 38,
+    minWidth: 90,
+    padding: '6px 14px',
+    fontSize: 12,
+  },
+  content: {
+    padding: '18px 18px 24px',
+  },
+  category: {
+    '& + &': {
+      marginTop: 24,
+    },
+  },
+  categoryLabel: {
+    display: 'block',
+    marginBottom: 8,
+    color: theme.palette.text.secondary,
+    fontSize: 10,
+    fontWeight: 600,
+    letterSpacing: '0.12em',
+  },
+  sourceGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: 6,
+    '@media (max-width: 560px)': {
+      gridTemplateColumns: '1fr',
+    },
+  },
+  sourceRow: {
+    display: 'flex',
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '4px 6px 4px 11px',
+    borderRadius: theme.shape.borderRadius,
+    background: 'rgba(225, 235, 242, 0.035)',
+    transition: 'background-color 160ms ease',
+    '&:hover': {
+      background: 'rgba(225, 235, 242, 0.065)',
+    },
+  },
+  sourceDisabled: {
+    color: theme.palette.text.secondary,
+  },
+  switchRoot: {
+    marginRight: -4,
+  },
+  formStack: {
+    display: 'grid',
+    maxWidth: 420,
+    gap: 16,
+  },
+  locationRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  locationInput: {
+    flex: 1,
+  },
+  saveButton: {
+    minWidth: 74,
+    minHeight: 40,
+  },
+  currentLocation: {
+    display: 'grid',
+    gap: 4,
+    paddingTop: 16,
+  },
+  learningPanel: {
+    maxWidth: 620,
+    padding: 14,
+    border: `1px solid ${theme.palette.divider}`,
+    borderRadius: theme.shape.borderRadius,
+    background: 'rgba(111, 159, 197, 0.06)',
+  },
+  code: {
+    color: theme.palette.primary.light,
+    fontFamily: 'inherit',
+    fontSize: '0.92em',
+  },
+  learningList: {
+    display: 'grid',
+    gap: 8,
+    margin: '12px 0 0',
+    paddingLeft: 18,
+    color: theme.palette.text.secondary,
+    fontSize: 12,
+    lineHeight: 1.55,
+  },
+  actions: {
+    minHeight: 48,
+    padding: '8px 12px',
+    borderTop: `1px solid ${theme.palette.divider}`,
+  },
+  key: {
+    display: 'inline-block',
+    minWidth: 22,
+    padding: '1px 5px',
+    border: `1px solid ${theme.palette.divider}`,
+    borderRadius: 3,
+    color: theme.palette.text.secondary,
+    fontFamily: 'inherit',
+    fontSize: 10,
+    textAlign: 'center',
+  },
+}));
 
 function SourceToggle({ source, onToggle }: { source: SourceConfig; onToggle: () => void }) {
+  const classes = useStyles();
+
   return (
-    <div
-      onClick={onToggle}
-      className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
-        source.enabled ? 'bg-white/5 hover:bg-white/10' : 'opacity-50 hover:bg-white/5'
-      }`}
-    >
-      <span className="text-white/90 text-sm">{source.name}</span>
-      <div className={`w-8 h-5 rounded-full transition-colors ${source.enabled ? 'bg-blue-500' : 'bg-white/20'}`}>
-        <div
-          className={`w-4 h-4 bg-white rounded-full m-0.5 transition-transform ${
-            source.enabled ? 'translate-x-3' : 'translate-x-0'
-          }`}
-        />
-      </div>
-    </div>
+    <label className={classes.sourceRow}>
+      <Typography
+        variant="body2"
+        className={source.enabled ? undefined : classes.sourceDisabled}
+      >
+        {source.name}
+      </Typography>
+      <Switch
+        className={classes.switchRoot}
+        checked={source.enabled}
+        onChange={onToggle}
+        color="primary"
+        size="small"
+        inputProps={{ 'aria-label': `Show ${source.name}` }}
+      />
+    </label>
   );
 }
 
@@ -39,94 +205,33 @@ export function Settings({
   onClose,
   onToggleSource,
   onUpdateLocation,
-  onAddCustomFeed,
-  onRemoveCustomFeed,
-  onSetLayout,
 }: SettingsProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('sources');
-  const [newFeedName, setNewFeedName] = useState('');
-  const [newFeedUrl, setNewFeedUrl] = useState('');
+  const classes = useStyles();
+  const [activeTab, setActiveTab] = useState<TabId>('sources');
   const [zipInput, setZipInput] = useState(settings.location.zip);
   const [locationSaved, setLocationSaved] = useState(false);
   const saveTimerRef = useRef<number | null>(null);
+  const zipIsValid = /^\d{5}$/.test(zipInput);
 
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-      }
-    };
+  useEffect(() => () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
   }, []);
 
   const handleSaveLocation = () => {
+    if (!zipIsValid) return;
     onUpdateLocation(zipInput, '');
     setLocationSaved(true);
-
-    // Clear any existing timer
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-    }
-
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       setLocationSaved(false);
       saveTimerRef.current = null;
     }, UI_TIMING.feedbackDuration);
   };
 
-  const handleAddFeed = () => {
-    if (newFeedName.trim() && newFeedUrl.trim()) {
-      onAddCustomFeed(newFeedName.trim(), newFeedUrl.trim());
-      setNewFeedName('');
-      setNewFeedUrl('');
-    }
-  };
-
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    {
-      id: 'sources',
-      label: 'Sources',
-      icon: (
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'location',
-      label: 'Location',
-      icon: (
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'custom',
-      label: 'Custom Feeds',
-      icon: (
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-        </svg>
-      ),
-    },
-    {
-      id: 'display',
-      label: 'Display',
-      icon: (
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-        </svg>
-      ),
-    },
-  ];
-
-  // Group sources by category
-  const sourcesByCategory = settings.sources.reduce((acc, source) => {
-    if (!acc[source.category]) acc[source.category] = [];
-    acc[source.category].push(source);
-    return acc;
+  const sourcesByCategory = settings.sources.reduce((groups, source) => {
+    if (!groups[source.category]) groups[source.category] = [];
+    groups[source.category].push(source);
+    return groups;
   }, {} as Record<string, SourceConfig[]>);
 
   const categoryLabels: Record<string, string> = {
@@ -134,186 +239,124 @@ export function Settings({
     tech: 'Technology',
     social: 'Social',
     finance: 'Finance',
-    custom: 'Custom',
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center"
-      onClick={onClose}
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      aria-labelledby="settings-title"
+      classes={{ paper: classes.paper }}
     >
-      <div
-        className="w-full h-full md:h-auto md:max-w-2xl md:max-h-[80vh] bg-[#1a1a1a] md:border md:border-white/10 md:rounded-lg shadow-2xl overflow-hidden flex flex-col"
-        onClick={e => e.stopPropagation()}
+      <DialogTitle disableTypography className={classes.titleBar}>
+        <Typography id="settings-title" component="h2" className={classes.title}>
+          Settings
+        </Typography>
+        <IconButton
+          size="small"
+          className={classes.closeButton}
+          onClick={onClose}
+          aria-label="Close settings"
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+
+      <Tabs
+        value={activeTab}
+        onChange={(_: ChangeEvent<Record<string, never>>, value: TabId) => setActiveTab(value)}
+        indicatorColor="primary"
+        textColor="primary"
+        variant="scrollable"
+        scrollButtons="off"
+        aria-label="Settings sections"
+        className={classes.tabs}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
-          <h2 className="text-white text-lg font-medium">Settings</h2>
-          <button
-            onClick={onClose}
-            className="text-white/60 hover:text-white p-1 rounded hover:bg-white/10 transition-colors"
-            aria-label="Close settings"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+        <Tab className={classes.tab} value="sources" label="Sources" />
+        <Tab className={classes.tab} value="location" label="Location" />
+        <Tab className={classes.tab} value="display" label="MUI notes" />
+      </Tabs>
 
-        {/* Tabs */}
-        <div className="flex border-b border-white/10 shrink-0">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
-                activeTab === tab.id
-                  ? 'text-white border-b-2 border-blue-500 -mb-px'
-                  : 'text-white/50 hover:text-white/70'
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {activeTab === 'sources' && (
-            <div className="space-y-6">
-              {Object.entries(sourcesByCategory).map(([category, sources]) => (
-                <div key={category}>
-                  <h3 className="text-white/50 text-xs font-medium uppercase tracking-wide mb-2">
-                    {categoryLabels[category] || category}
-                  </h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {sources.map(source => (
-                      <SourceToggle
-                        key={source.id}
-                        source={source}
-                        onToggle={() => onToggleSource(source.id)}
-                      />
-                    ))}
-                  </div>
+      <DialogContent className={classes.content}>
+        {activeTab === 'sources' && (
+          <div>
+            {Object.entries(sourcesByCategory).map(([category, sources]) => (
+              <section key={category} className={classes.category}>
+                <Typography component="h3" variant="overline" className={classes.categoryLabel}>
+                  {categoryLabels[category] || category}
+                </Typography>
+                <div className={classes.sourceGrid}>
+                  {sources.map(source => (
+                    <SourceToggle
+                      key={source.id}
+                      source={source}
+                      onToggle={() => onToggleSource(source.id)}
+                    />
+                  ))}
                 </div>
-              ))}
+              </section>
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'location' && (
+          <div className={classes.formStack}>
+            <div className={classes.locationRow}>
+              <TextField
+                className={classes.locationInput}
+                label="ZIP code"
+                value={zipInput}
+                onChange={event => setZipInput(event.target.value.replace(/\D/g, '').slice(0, 5))}
+                error={zipInput.length > 0 && !zipIsValid}
+                helperText={zipInput.length > 0 && !zipIsValid ? 'Enter a five-digit U.S. ZIP code.' : 'Used for local weather and radar.'}
+                variant="outlined"
+                size="small"
+                inputProps={{ inputMode: 'numeric', maxLength: 5 }}
+              />
+              <Button
+                className={classes.saveButton}
+                variant="contained"
+                color="primary"
+                disabled={!zipIsValid}
+                onClick={handleSaveLocation}
+              >
+                {locationSaved ? 'Saved' : 'Save'}
+              </Button>
             </div>
-          )}
-
-          {activeTab === 'location' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-white/70 text-sm mb-2">ZIP Code</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={zipInput}
-                    onChange={e => setZipInput(e.target.value)}
-                    placeholder="e.g., 22314"
-                    className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder:text-white/50 outline-none focus:border-blue-500 transition-colors"
-                    maxLength={5}
-                  />
-                  <button
-                    onClick={handleSaveLocation}
-                    className={`px-4 py-2 rounded font-medium transition-colors ${
-                      locationSaved
-                        ? 'bg-green-500 text-white'
-                        : 'bg-blue-500 hover:bg-blue-600 text-white'
-                    }`}
-                  >
-                    {locationSaved ? 'Saved!' : 'Save'}
-                  </button>
-                </div>
-                <p className="text-white/40 text-xs mt-2">
-                  Enter your ZIP code for local weather data.
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-white/10">
-                <h3 className="text-white/70 text-sm mb-2">Current Location</h3>
-                <p className="text-white/90">{settings.location.city || settings.location.zip}</p>
-              </div>
+            <Divider />
+            <div className={classes.currentLocation}>
+              <Typography variant="caption" color="textSecondary">Current location</Typography>
+              <Typography variant="body2">
+                {settings.location.city || settings.location.zip}
+              </Typography>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'custom' && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-white/70 text-sm mb-2">Add Custom RSS Feed</h3>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={newFeedName}
-                    onChange={e => setNewFeedName(e.target.value)}
-                    placeholder="Feed name"
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder:text-white/50 outline-none focus:border-blue-500 transition-colors"
-                  />
-                  <input
-                    type="url"
-                    value={newFeedUrl}
-                    onChange={e => setNewFeedUrl(e.target.value)}
-                    placeholder="RSS feed URL"
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder:text-white/50 outline-none focus:border-blue-500 transition-colors"
-                  />
-                  <button
-                    onClick={handleAddFeed}
-                    disabled={!newFeedName.trim() || !newFeedUrl.trim()}
-                    className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-white/10 disabled:text-white/50 text-white rounded font-medium transition-colors"
-                  >
-                    Add Feed
-                  </button>
-                </div>
-              </div>
+        {activeTab === 'display' && (
+          <section className={classes.learningPanel}>
+            <Typography component="h3" variant="subtitle2">What this screen teaches</Typography>
+            <Typography variant="body2" color="textSecondary">
+              This is Material-UI 4.12.4, whose package name is <code className={classes.code}>@material-ui/core</code>.
+              The app keeps BNN's dense visual language through a custom theme.
+            </Typography>
+            <ul className={classes.learningList}>
+              <li><code className={classes.code}>ThemeProvider</code> supplies palette, type, shape, defaults, and global overrides.</li>
+              <li><code className={classes.code}>makeStyles</code> creates scoped JSS classes with access to theme tokens.</li>
+              <li><code className={classes.code}>Tabs</code> and <code className={classes.code}>Tab</code> manage selection and keyboard semantics.</li>
+              <li><code className={classes.code}>Dialog</code>, <code className={classes.code}>Switch</code>, and <code className={classes.code}>TextField</code> supply accessible interaction behavior.</li>
+            </ul>
+          </section>
+        )}
+      </DialogContent>
 
-              {settings.customFeeds.length > 0 && (
-                <div className="pt-4 border-t border-white/10">
-                  <h3 className="text-white/70 text-sm mb-2">Your Custom Feeds</h3>
-                  <div className="space-y-2">
-                    {settings.customFeeds.map(feed => (
-                      <div
-                        key={feed.id}
-                        className="flex items-center justify-between p-2 bg-white/5 rounded"
-                      >
-                        <div>
-                          <div className="text-white/90 text-sm">{feed.name}</div>
-                          <div className="text-white/40 text-xs truncate max-w-xs">{feed.url}</div>
-                        </div>
-                        <button
-                          onClick={() => onRemoveCustomFeed(feed.id)}
-                          className="text-red-400 hover:text-red-300 p-1 hover:bg-red-500/10 rounded transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'display' && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-white/70 text-sm mb-2">Layout</h3>
-                <p className="text-white/50 text-xs">
-                  The layout automatically adapts to your screen size. Desktop shows a two-column layout with the feed and sidebar. Mobile shows a single column with bottom tab navigation.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-white/10 shrink-0">
-          <p className="text-white/50 text-xs text-center">
-            Press <kbd className="px-1 border border-white/20 rounded text-xs">Esc</kbd> to close
-          </p>
-        </div>
-      </div>
-    </div>
+      <DialogActions className={classes.actions}>
+        <Typography variant="caption" color="textSecondary">
+          <kbd className={classes.key}>Esc</kbd> closes this dialog
+        </Typography>
+      </DialogActions>
+    </Dialog>
   );
 }

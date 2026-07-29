@@ -1,13 +1,13 @@
 # Blake News Now
 
 **Project:** Blake News Now - Dense Information Dashboard
-**Version:** 0.3.0
+**Version:** 0.4.0
 
 ## Quick Start
 
 ```bash
 npm install
-npm start        # Starts API server (3001) + dev server (5173)
+npm start        # Starts API server (3001) + dev server (3000)
 ```
 
 ## Architecture
@@ -33,7 +33,8 @@ Dense 3-column layout optimized for information density:
 ```
 
 **Tech Stack:**
-- React 19 + TypeScript + Vite
+- React 17 + TypeScript + Vite
+- Material-UI 4.12.4 with a custom dense theme
 - Tailwind CSS 4
 - Express.js API server
 
@@ -66,14 +67,15 @@ src/
 
 server/
 ├── proxy.cjs              # Express API server
-└── data-feeds.cjs         # RSS, Reddit, HN, 4chan, weather, markets, predictions APIs
+├── rss.cjs                # RSS/Atom parsing and freshness policy
+└── data-feeds.cjs         # Reddit, HN, 4chan, weather, markets, predictions APIs
 ```
 
 ## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| GET /api/headlines | News from 18 RSS feeds |
+| GET /api/headlines | Current news from 18 RSS feeds |
 | GET /api/reddit | Reddit posts from r/news, r/worldnews, r/technology |
 | GET /api/hackernews | Hacker News top stories |
 | GET /api/4chan | 4chan threads from /news/ and /pol/ (5+ replies, sorted by engagement) |
@@ -123,7 +125,7 @@ server/
 - [x] Compact bottom bar (Weather/Predictions/Markets)
 - [x] Config extracted to src/config.ts
 - [x] Accessibility improvements (aria-labels, contrast)
-- [x] Expanded RSS feeds (9→18 headline sources: +WaPo, CNN, Fox, Politico, Intercept, ProPublica, Foreign Policy, Breitbart, Daily Wire)
+- [x] Replaced dead feeds and added a strict seven-day freshness policy
 - [x] 4chan integration (/news/, /pol/ — catalog API, 5+ reply filter, rate-limited fetching)
 - [x] pizzint.watch geopolitical predictions (scraped from Next.js RSC payload, merged with Polymarket)
 - [x] Enhanced Polymarket predictions (lower volume threshold $5k, 25 item limit, 30 total with pizzint)
@@ -142,7 +144,7 @@ server/
 
 | Category | Sources |
 |----------|---------|
-| News | NPR, BBC, Guardian, Al Jazeera, ABC, CBS, NY Times, Reuters, AP, Washington Post, CNN, Fox News, Politico, The Intercept, ProPublica, Foreign Policy, Breitbart, Daily Wire |
+| News | NPR, BBC, Guardian, Al Jazeera, ABC, CBS, NY Times, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, The Intercept, ProPublica, Foreign Policy, Breitbart |
 | Tech | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters |
 | Social | Reddit (r/news, r/worldnews, r/technology), 4chan (/news/, /pol/) |
 | Finance | Yahoo Finance, CoinGecko |

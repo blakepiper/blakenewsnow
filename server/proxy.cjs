@@ -12,8 +12,33 @@ const { registerRoutes: registerDataRoutes } = require('./data-feeds.cjs');
 const app = express();
 const PORT = 3001;
 
-// Enable CORS for all origins (dev only)
-app.use(cors());
+const allowedOrigins = new Set(
+  (process.env.CORS_ORIGIN || 'http://localhost:3000,http://127.0.0.1:3000')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)
+);
+
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && !allowedOrigins.has(origin)) {
+    return res.status(403).json({ error: 'Origin not allowed' });
+  }
+  next();
+});
+app.use(cors({
+  origin(origin, callback) {
+    // Non-browser clients do not send Origin.
+    return callback(null, !origin || allowedOrigins.has(origin));
+  },
+}));
+app.use((_req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('X-Frame-Options', 'DENY');
+  next();
+});
 
 // Register data feed API routes (headlines, weather, markets, predictions, ticker)
 registerDataRoutes(app);
@@ -25,12 +50,15 @@ app.get('/api/radar/tile', (req, res) => {
     return res.status(400).send('Missing url parameter');
   }
 
-  // Only allow RainViewer URLs
-  if (!url.startsWith('https://tilecache.rainviewer.com')) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return res.status(400).send('Invalid radar URL');
+  }
+  if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'tilecache.rainviewer.com') {
     return res.status(403).send('Invalid radar URL');
   }
-
-  const parsedUrl = new URL(url);
 
   const options = {
     hostname: parsedUrl.hostname,

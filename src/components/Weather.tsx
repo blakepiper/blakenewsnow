@@ -183,6 +183,8 @@ export function Weather({ zip = '22314' }: WeatherProps) {
         img.src = `https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/${ZOOM}/${tx}/${ty}.png`;
       }
     }
+    // Tile loading only depends on the map center. Image callbacks retain this render's draw function.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weather?.lat, weather?.lon]);
 
   // Load radar overlay tiles for current frame
@@ -228,6 +230,8 @@ export function Weather({ zip = '22314' }: WeatherProps) {
         img.src = proxiedUrl;
       }
     }
+    // The frame and map center fully identify the tile set loaded by this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weather?.lat, weather?.lon, radar, radarFrame]);
 
   // Draw the composite radar on canvas

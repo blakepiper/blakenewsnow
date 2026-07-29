@@ -1,102 +1,126 @@
 # Blake News Now
 
-A dense, information-rich news aggregator dashboard for desktop.
+A dense, keyboard-friendly dashboard for current news, technology, social posts, markets, weather, and prediction data.
 
-## Features
-
-- **Multi-source headlines** from 15+ news sources (RSS, Reddit, Hacker News)
-- **Live financial data** - Market indices, crypto prices, stock movers
-- **Weather** with animated radar for your location
-- **Prediction markets** from Polymarket
-- **Maximum density** - Single-line items, 3-column layout, see 40+ headlines at once
-- **Full keyboard navigation** - Browse without touching your mouse
-- **Search & filters** - Quick filters for News/Tech/Social, fuzzy search
-- **Read/unread tracking** - Know what you've already seen
-- **Dark theme** - Easy on the eyes
-
-## Screenshot
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ BNN  [All][News][Tech][Social][Saved]           [🔍][?][⚙]  │
-├──────────────────┬─────────────────┬────────────────────────┤
-│ ● NPR   Trump... │ 2.4k news Title │ 847 Show HN: ...   3h │
-│ ● BBC   UK par.. │ 1.8k world Post │ 623 Ask HN: ...    5h │
-│ ● Guard Climate. │ 956  tech  New  │ 412 Why I built... 2h │
-│ ...              │ ...             │ ...                    │
-├──────────────────┴─────────────────┴────────────────────────┤
-│ ☀️ 72° Alexandria │ POL Trump 52%  │ SPX 5234  +0.5%       │
-│ Mon Tue Wed Thu  │ FIN Rate  78%  │ BTC 67234 +2.1%       │
-├─────────────────────────────────────────────────────────────┤
-│ ◆ BREAKING: Senate passes... ◆ Apple announces...          │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Installation
+## Start the app
 
 ```bash
-git clone https://github.com/yourusername/blakenewsnow.git
-cd blakenewsnow
-npm install
+npm install --legacy-peer-deps
 npm start
 ```
 
-Open http://localhost:5173
+Open [http://localhost:3000](http://localhost:3000). The Express API runs on port 3001.
 
-## Keyboard Shortcuts
+Set `CORS_ORIGIN` to a comma-separated list of frontend origins when the UI is hosted somewhere else.
+
+`--legacy-peer-deps` is needed because this project intentionally pins the retired Material-UI 4 package line. The installed runtime versions are mutually compatible:
+
+- React 17.0.2
+- React DOM 17.0.2
+- Material-UI core 4.12.4
+- Material-UI icons 4.11.3
+- React Three Fiber 7.0.29
+
+## Current-feed guarantees
+
+The server applies the following rules before a headline can reach the display:
+
+- Parse RSS and Atom with `fast-xml-parser`, including namespaced date fields and Atom link attributes.
+- Never treat a missing or invalid publication date as the current time.
+- Infer a date from common `/YYYY/MM/DD/` article URLs when a feed omits it.
+- Reject undated items, invalid links, future timestamps, and stories older than seven days.
+- Sort by publication time, newest first.
+- Deduplicate repeated titles.
+- Coalesce simultaneous requests so several open clients do not stampede upstream feeds.
+
+The client repeats the date, link, and freshness checks as a second line of defense. On desktop, the two-column feed uses row-major order: ranks 1 and 2 share the first row, ranks 3 and 4 share the second, and so on.
+
+## Material-UI 4 learning map
+
+This project uses the v4 package names, not the v5+ `@mui/*` names.
+
+| Concept | Example |
+|---|---|
+| Theme creation and global defaults | `src/theme.ts` |
+| `ThemeProvider`, `StylesProvider`, `CssBaseline` | `src/main.tsx` |
+| `makeStyles`, theme tokens, `AppBar`, `Toolbar`, `Tooltip`, `IconButton` | `src/components/Header.tsx` |
+| Controlled `Tabs` and `Tab` | `src/components/FilterPills.tsx` |
+| `Dialog`, `Switch`, `TextField`, `Button`, component composition | `src/components/Settings.tsx` |
+
+The settings dialog also contains a short in-app MUI notes tab. The visual theme stays intentionally compact and BNN-specific instead of using Material-UI's default appearance.
+
+Useful official v4 references:
+
+- [Material-UI v4 documentation](https://v4.mui.com/)
+- [Component customization](https://v4.mui.com/customization/components/)
+- [Tabs](https://v4.mui.com/components/tabs/)
+- [Theming](https://v4.mui.com/customization/theming/)
+
+## Commands
+
+```bash
+npm start          # API and Vite development server
+npm run server     # API only
+npm run dev        # frontend only
+npm run build      # TypeScript and production bundle
+npm run lint
+npm run test:unit  # RSS parser and freshness regression tests
+npm run test:api   # live API diagnostics; requires npm run server
+```
+
+## Data sources
+
+News sources currently configured:
+
+- NPR, BBC, Guardian, Al Jazeera
+- ABC News, CBS News, NY Times, NBC News
+- PBS NewsHour, Axios, The Hill, Vox
+- Fox News, Politico, The Intercept, ProPublica
+- Foreign Policy, Breitbart
+
+Technology and social sources:
+
+- Ars Technica, The Verge, TechCrunch, Wired, Lobsters
+- Hacker News
+- Reddit r/news, r/worldnews, and r/technology through one combined Atom feed
+- 4chan /news/ and /pol/
+
+Reddit can throttle anonymous RSS traffic with HTTP 403 or 429 responses. The server caches successful responses for five minutes and returns the last good response when available. OAuth is the durable next step.
+
+Other data comes from the National Weather Service, RainViewer, Yahoo Finance, CoinGecko, Polymarket, and pizzint.watch.
+
+## Keyboard shortcuts
 
 | Key | Action |
-|-----|--------|
-| `j` / `↓` | Next headline |
-| `k` / `↑` | Previous headline |
-| `Enter` | Open article in new tab |
-| `/` | Search headlines |
-| `?` | Show all shortcuts |
-| `Ctrl+,` | Open settings |
-| `Ctrl+S` | Save article to reading list |
-| `Esc` | Close modal |
+|---|---|
+| `j` or `Down` | Next story |
+| `k` or `Up` | Previous story |
+| `Enter` | Open selected story |
+| `/` | Search |
+| `?` | Keyboard shortcuts |
+| `Ctrl+,` | Settings |
+| `Ctrl+S` | Save selected story |
+| `1-5` | Change feed filter |
+| `Esc` | Close the active dialog |
 
-## Configuration
+## Architecture
 
-Click the gear icon (⚙) to open settings:
+```text
+src/
+  components/       Dashboard surfaces and MUI examples
+  hooks/            Feed orchestration, settings, keyboard behavior
+  stores/           Local settings persistence
+  theme.ts          Material-UI 4 theme
+  App.tsx           Main layout and interaction wiring
 
-- **Sources** - Enable/disable news sources
-- **Location** - Set your ZIP code for weather
-- **Layout** - Switch between compact and dashboard views
+server/
+  data-feeds.cjs    Upstream services, caching, and API routes
+  rss.cjs           RSS/Atom parsing and freshness policy
+  proxy.cjs         Express server and radar tile proxy
 
-## Data Sources
-
-| Category | Sources |
-|----------|---------|
-| **News** | NPR, BBC, Guardian, Al Jazeera, ABC, CBS, NY Times, Reuters, AP |
-| **Tech** | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters |
-| **Social** | Reddit (r/news, r/worldnews, r/technology) |
-| **Finance** | Yahoo Finance, CoinGecko |
-| **Predictions** | Polymarket |
-| **Weather** | National Weather Service, RainViewer |
-
-## Tech Stack
-
-- **Frontend:** React 19 + TypeScript + Tailwind CSS 4 + Vite
-- **Backend:** Express.js API server
-- **State:** React hooks + localStorage
-
-## Development
-
-```bash
-# Run both servers
-npm start
-
-# Build for production
-npm run build
-
-# Run only the API server
-npm run server
-
-# Run only the frontend dev server
-npm run dev
+tests/
+  rss.test.cjs      Deterministic feed regression tests
+  diagnostic.cjs    Live API diagnostics
 ```
 
-## License
-
-MIT
+See [AUDIT_2026-07-29.md](./AUDIT_2026-07-29.md) for the revival audit and remaining work.

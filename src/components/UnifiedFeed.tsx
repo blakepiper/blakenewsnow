@@ -44,8 +44,7 @@ export function UnifiedFeed({
   onRefresh,
 }: UnifiedFeedProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const leftRef = useRef<HTMLDivElement>(null);
-  const rightRef = useRef<HTMLDivElement>(null);
+  const desktopRef = useRef<HTMLDivElement>(null);
   const mobileRef = useRef<HTMLDivElement>(null);
   const [pullDistance, setPullDistance] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
@@ -58,24 +57,20 @@ export function UnifiedFeed({
     return item.sourceType === filter;
   });
 
-  const splitPoint = Math.ceil(filteredItems.length / 2);
-
   // Auto-scroll to selected item
   useEffect(() => {
     if (isDesktop) {
-      const isLeft = selectedIndex < splitPoint;
-      const container = isLeft ? leftRef.current : rightRef.current;
+      const container = desktopRef.current;
       if (!container) return;
-      const localIndex = isLeft ? selectedIndex : selectedIndex - splitPoint;
       const els = container.querySelectorAll('[data-headline]');
-      els[localIndex]?.scrollIntoView({ block: 'nearest' });
+      els[selectedIndex]?.scrollIntoView({ block: 'nearest' });
     } else {
       const container = mobileRef.current;
       if (!container) return;
       const els = container.querySelectorAll('[data-headline]');
       els[selectedIndex]?.scrollIntoView({ block: 'nearest' });
     }
-  }, [selectedIndex, isDesktop, splitPoint]);
+  }, [selectedIndex, isDesktop]);
 
   // Pull-to-refresh touch handlers (mobile only)
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -155,40 +150,25 @@ export function UnifiedFeed({
     );
   }
 
-  // Desktop: two independently scrollable columns
-  const leftItems = filteredItems.slice(0, splitPoint);
-  const rightItems = filteredItems.slice(splitPoint);
-
+  // Desktop: one row-major grid keeps rank order legible across both columns.
   return (
-    <div className="h-full flex">
-      <div ref={leftRef} className="flex-1 overflow-y-auto feed-scroll border-r border-white/5">
-        {leftItems.map((item, i) => (
+    <div
+      ref={desktopRef}
+      className="h-full grid grid-cols-2 content-start overflow-y-auto feed-scroll"
+    >
+      {filteredItems.map((item, index) => (
+        <div key={item.id} className={index % 2 === 0 ? 'border-r border-white/5' : ''}>
           <FeedItem
-            key={item.id}
             item={item}
-            isSelected={selectedIndex === i}
+            isSelected={selectedIndex === index}
             isRead={readArticles.includes(item.id)}
             isSaved={savedArticles.includes(item.id)}
             isNew={newItemIds.has(item.id)}
-            onSelect={() => onSelectIndex(i)}
+            onSelect={() => onSelectIndex(index)}
             onMarkAsRead={onMarkAsRead}
           />
-        ))}
-      </div>
-      <div ref={rightRef} className="flex-1 overflow-y-auto feed-scroll">
-        {rightItems.map((item, i) => (
-          <FeedItem
-            key={item.id}
-            item={item}
-            isSelected={selectedIndex === splitPoint + i}
-            isRead={readArticles.includes(item.id)}
-            isSaved={savedArticles.includes(item.id)}
-            isNew={newItemIds.has(item.id)}
-            onSelect={() => onSelectIndex(splitPoint + i)}
-            onMarkAsRead={onMarkAsRead}
-          />
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }
