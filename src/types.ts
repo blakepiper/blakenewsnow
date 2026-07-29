@@ -8,8 +8,9 @@ export interface FeedItem {
   link: string;
   score?: number;
   comments?: number;
-  subreddit?: string;
+  community?: string;
   domain?: string;
+  description?: string;
   isNew?: boolean;
 }
 

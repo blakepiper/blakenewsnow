@@ -8,9 +8,10 @@ const cors = require('cors');
 const https = require('https');
 const { URL } = require('url');
 const { registerRoutes: registerDataRoutes } = require('./data-feeds.cjs');
+const { registerArticlePreviewRoute } = require('./article-preview.cjs');
 
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 const allowedOrigins = new Set(
   (process.env.CORS_ORIGIN || 'http://localhost:3000,http://127.0.0.1:3000')
@@ -42,6 +43,7 @@ app.use((_req, res, next) => {
 
 // Register data feed API routes (headlines, weather, markets, predictions, ticker)
 registerDataRoutes(app);
+registerArticlePreviewRoute(app);
 
 // Radar tile proxy (to avoid CORS issues with RainViewer)
 app.get('/api/radar/tile', (req, res) => {
@@ -92,10 +94,16 @@ app.listen(PORT, () => {
   console.log(`[SERVER] Blake News Now API running on http://localhost:${PORT}`);
   console.log('[SERVER] Available endpoints:');
   console.log('  - /api/headlines');
+  console.log('  - /api/tech');
+  console.log('  - /api/lemmy');
+  console.log('  - /api/hackernews');
+  console.log('  - /api/4chan');
   console.log('  - /api/weather');
+  console.log('  - /api/crypto');
   console.log('  - /api/markets');
   console.log('  - /api/predictions');
   console.log('  - /api/ticker');
   console.log('  - /api/radar/tile');
+  console.log('  - /api/article-preview');
   console.log('  - /health');
 });

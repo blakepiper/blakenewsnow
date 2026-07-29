@@ -1,11 +1,13 @@
 import { createMuiTheme } from '@material-ui/core/styles';
 
-const terminalFont = [
-  'Cascadia Mono',
-  'SFMono-Regular',
-  'Consolas',
-  'Liberation Mono',
-  'monospace',
+const interfaceFont = [
+  '-apple-system',
+  'BlinkMacSystemFont',
+  '"Segoe UI"',
+  'Roboto',
+  'Helvetica',
+  'Arial',
+  'sans-serif',
 ].join(',');
 
 export const theme = createMuiTheme({
@@ -33,10 +35,10 @@ export const theme = createMuiTheme({
     borderRadius: 4,
   },
   typography: {
-    fontFamily: terminalFont,
+    fontFamily: interfaceFont,
     fontSize: 12,
     button: {
-      fontFamily: terminalFont,
+      fontFamily: interfaceFont,
       fontSize: '0.75rem',
       fontWeight: 600,
       letterSpacing: '0.01em',

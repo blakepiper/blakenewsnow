@@ -9,18 +9,20 @@ interface RawHeadline {
   source: string;
   timestamp: string;
   link?: string;
+  description?: string;
 }
 
-interface RawRedditPost {
+interface RawSocialPost {
   id: string;
   title: string;
   source: string;
-  subreddit: string;
+  community: string;
   score?: number;
   comments?: number;
   url: string;
   permalink: string;
   timestamp: string;
+  description?: string;
 }
 
 interface RawHNStory {
@@ -74,6 +76,7 @@ const MAX_FEED_ITEM_AGE = 7 * 24 * 60 * 60 * 1000;
 
 export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
   const [items, setItems] = useState<FeedItem[]>([]);
+  const [briefingItems, setBriefingItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
@@ -84,10 +87,10 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
   const fetchAll = useCallback(async () => {
     const requestSequence = ++requestSequenceRef.current;
     try {
-      const [headlinesRes, techRes, redditRes, hnRes, chanRes] = await Promise.all([
+      const [headlinesRes, techRes, lemmyRes, hnRes, chanRes] = await Promise.all([
         fetch(`${API_BASE}/api/headlines`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/tech`).then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch(`${API_BASE}/api/reddit`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/lemmy`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/hackernews`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/4chan`).then(r => r.ok ? r.json() : []).catch(() => []),
       ]);
@@ -104,6 +107,7 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
           category: h.source,
           timestamp: h.timestamp,
           link: h.link || '',
+          description: h.description,
         });
       });
 
@@ -117,22 +121,24 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
           category: h.source,
           timestamp: h.timestamp,
           link: h.link || '',
+          description: h.description,
         });
       });
 
-      // Normalize reddit
-      (redditRes as RawRedditPost[]).forEach((r) => {
+      // Normalize federated social news
+      (lemmyRes as RawSocialPost[]).forEach((post) => {
         feedItems.push({
-          id: r.id,
-          title: r.title,
-          source: r.source,
+          id: post.id,
+          title: post.title,
+          source: post.source,
           sourceType: 'social',
-          category: r.source,
-          timestamp: r.timestamp,
-          link: r.permalink,
-          score: r.score,
-          comments: r.comments,
-          subreddit: r.subreddit,
+          category: post.source,
+          timestamp: post.timestamp,
+          link: post.url || post.permalink,
+          score: post.score,
+          comments: post.comments,
+          community: post.community,
+          description: post.description,
         });
       });
 
@@ -211,6 +217,9 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
       }
       prevItemIdsRef.current = currentIds;
 
+      // Preserve corroborating reports for event clustering even when the visible feed
+      // collapses near-identical headlines from different publishers.
+      setBriefingItems(validItems);
       setItems(deduped);
       setError(null);
     } catch (err) {
@@ -239,5 +248,5 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
     fetchAll();
   }, [fetchAll]);
 
-  return { items, loading, error, newItemIds, refresh };
+  return { items, briefingItems, loading, error, newItemIds, refresh };
 }

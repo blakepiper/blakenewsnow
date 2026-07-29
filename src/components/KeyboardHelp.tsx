@@ -35,7 +35,7 @@ export function KeyboardHelp({ onClose }: KeyboardHelpProps) {
                 {shortcut.keys.map((key, keyIdx) => (
                   <span key={keyIdx}>
                     {keyIdx > 0 && <span className="text-white/50 text-xs mx-1">or</span>}
-                    <kbd className="px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-xs font-mono">
+                    <kbd className="px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-xs font-sans">
                       {key}
                     </kbd>
                   </span>

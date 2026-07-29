@@ -317,17 +317,18 @@ async function runTests() {
     validateSourceDiversity(),
   ]);
 
-  // Test Reddit
-  log('\n[3/8] Reddit API', 'cyan');
-  const redditData = await testEndpoint('Reddit', '/api/reddit', [
+  // Test Lemmy
+  log('\n[3/8] Lemmy API', 'cyan');
+  await testEndpoint('Lemmy', '/api/lemmy', [
     validateArray(5),
     validateFields(['id', 'title', 'source', 'score', 'comments', 'timestamp']),
     validateTimestamps(),
+    validateSourceDiversity(),
     (data, name) => {
       if (!Array.isArray(data)) return;
-      const lowScore = data.filter(d => d.score < 100).length;
+      const lowScore = data.filter(d => d.score < 5).length;
       if (lowScore > data.length * 0.5) {
-        warn(`${name} engagement`, `${lowScore}/${data.length} posts have <100 upvotes`);
+        warn(`${name} engagement`, `${lowScore}/${data.length} posts have scores below 5`);
       }
     }
   ]);

@@ -39,17 +39,24 @@ const useStyles = makeStyles(theme => ({
     gap: 7,
   },
   logo: {
-    width: 20,
-    height: 20,
-    borderRadius: 3,
-    objectFit: 'cover',
+    width: 118,
+    height: 24,
+    objectFit: 'contain',
+    objectPosition: 'left center',
+    '@media (max-width: 420px)': {
+      width: 102,
+    },
   },
   title: {
-    margin: 0,
-    color: theme.palette.text.primary,
-    fontSize: 14,
-    fontWeight: 700,
-    letterSpacing: '-0.02em',
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: 'hidden',
+    clip: 'rect(0, 0, 0, 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
   },
   actions: {
     display: 'flex',
@@ -120,14 +127,14 @@ export function Header({
       <Toolbar variant="dense" disableGutters className={classes.toolbar}>
         <div className={classes.brandGroup}>
           <img
-            src="/icons/icon-192.png"
+            src="/brand-logo.png"
             alt="Blake News Now"
             className={classes.logo}
             onError={event => {
               event.currentTarget.style.display = 'none';
             }}
           />
-          <h1 className={classes.title}>BNN</h1>
+          <h1 className={classes.title}>Blake News Now</h1>
           <div className={classes.desktopFilters}>{filters}</div>
         </div>
 

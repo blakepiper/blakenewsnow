@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bnn-cache-v3';
+const CACHE_NAME = 'bnn-cache-v4';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -49,7 +49,7 @@ self.addEventListener('fetch', (event) => {
         if (cached) return cached;
         if (request.mode === 'navigate') {
           return new Response(
-            '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width"><title>BNN - Offline</title></head><body style="background:#0a0a0a;color:#fff;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1>BNN</h1><p>You are offline. Please check your connection.</p></div></body></html>',
+            '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width"><title>BNN - Offline</title></head><body style="background:#0a0a0a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1>BNN</h1><p>You are offline. Please check your connection.</p></div></body></html>',
             { headers: { 'Content-Type': 'text/html' } }
           );
         }

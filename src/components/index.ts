@@ -8,6 +8,8 @@ export { Settings } from './Settings';
 export { FilterPills } from './FilterPills';
 export { Header } from './Header';
 export { UnifiedFeed } from './UnifiedFeed';
+export { NowBriefing } from './NowBriefing';
+export { ArticlePreview } from './ArticlePreview';
 export { FeedItem } from './FeedItem';
 export { Sidebar } from './Sidebar';
 export { BottomTabBar } from './BottomTabBar';

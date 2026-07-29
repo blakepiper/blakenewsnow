@@ -1,0 +1,377 @@
+import type { FeedItem } from '../types';
+
+const DEFAULT_WINDOW_HOURS = 36;
+const DEFAULT_MAX_ITEMS = 180;
+const DEFAULT_MAX_CLUSTERS = 5;
+const CLUSTER_SIMILARITY = 0.16;
+
+const STOP_WORDS = new Set([
+  'a', 'about', 'after', 'again', 'against', 'all', 'also', 'am', 'an', 'and', 'any',
+  'are', 'as', 'at', 'be', 'because', 'been', 'before', 'being', 'between', 'both',
+  'but', 'by', 'can', 'could', 'day', 'did', 'do', 'does', 'doing', 'during', 'each',
+  'for', 'from', 'further', 'get', 'gets', 'got', 'had', 'has', 'have', 'having',
+  'he', 'her', 'here', 'hers', 'herself', 'him', 'himself', 'his', 'how', 'i', 'if',
+  'in', 'into', 'is', 'it', 'its', 'itself', 'just', 'latest', 'live', 'may', 'me',
+  'might', 'more', 'most', 'my', 'new', 'news', 'no', 'nor', 'not', 'now', 'of',
+  'off', 'on', 'once', 'only', 'or', 'other', 'our', 'out', 'over', 'own', 'report',
+  'reports', 'record', 'high', 'said', 'says', 'she', 'should', 'so', 'some', 'than', 'that', 'the',
+  'their', 'them', 'themselves', 'then', 'there', 'these', 'they', 'this', 'those',
+  'through', 'to', 'today', 'too', 'under', 'up', 'us', 'very', 'was', 'we', 'were',
+  'what', 'when', 'where', 'which', 'while', 'who', 'why', 'will', 'with', 'would',
+  'you', 'your',
+]);
+
+type SparseVector = Map<string, number>;
+
+interface Document {
+  item: FeedItem;
+  timestamp: number;
+  tokens: string[];
+  vector: SparseVector;
+}
+
+interface WorkingCluster {
+  documents: Document[];
+  centroid: SparseVector;
+}
+
+export interface BriefingCluster {
+  id: string;
+  headline: string;
+  link: string;
+  timestamp: string;
+  sources: string[];
+  sourceTypes: FeedItem['sourceType'][];
+  keywords: string[];
+  supporting: Array<{
+    id: string;
+    headline: string;
+    link: string;
+    source: string;
+  }>;
+  itemCount: number;
+  coverage: 'broad coverage' | 'multi-source' | 'developing' | 'single report';
+  score: number;
+}
+
+export interface NowBriefing {
+  generatedAt: string;
+  analyzedCount: number;
+  windowHours: number;
+  clusters: BriefingCluster[];
+}
+
+export interface BriefingOptions {
+  now?: number;
+  windowHours?: number;
+  maxItems?: number;
+  maxClusters?: number;
+}
+
+export interface RelatedFeedItem {
+  item: FeedItem;
+  similarity: number;
+  sharedTerms: string[];
+}
+
+function stem(token: string): string {
+  if (token.endsWith("'s")) token = token.slice(0, -2);
+  if (token.length > 6 && token.endsWith('ing')) return token.slice(0, -3);
+  if (token.length > 5 && token.endsWith('ed')) return token.slice(0, -2);
+  if (token.length > 5 && token.endsWith('es')) return token.slice(0, -2);
+  if (token.length > 4 && token.endsWith('s')) return token.slice(0, -1);
+  return token;
+}
+
+function tokenize(title: string): string[] {
+  return (title.toLocaleLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) || [])
+    .map(stem)
+    .filter(token => token.length > 2 && !STOP_WORDS.has(token) && !/^\d+$/.test(token));
+}
+
+function termFeatures(tokens: string[]): string[] {
+  const features = [...tokens.map(token => `u:${token}`)];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    features.push(`b:${tokens[index]}_${tokens[index + 1]}`);
+  }
+  return features;
+}
+
+function normalizeVector(vector: SparseVector): SparseVector {
+  const magnitude = Math.sqrt([...vector.values()].reduce((sum, value) => sum + value * value, 0));
+  if (magnitude === 0) return vector;
+  return new Map([...vector].map(([term, value]) => [term, value / magnitude]));
+}
+
+function cosine(left: SparseVector, right: SparseVector): number {
+  const [smaller, larger] = left.size <= right.size ? [left, right] : [right, left];
+  let dotProduct = 0;
+  smaller.forEach((value, term) => {
+    dotProduct += value * (larger.get(term) || 0);
+  });
+  return dotProduct;
+}
+
+function meanVector(documents: Document[]): SparseVector {
+  const vector = new Map<string, number>();
+  documents.forEach(document => {
+    document.vector.forEach((value, term) => {
+      vector.set(term, (vector.get(term) || 0) + value / documents.length);
+    });
+  });
+  return normalizeVector(vector);
+}
+
+function sharedUnigrams(tokens: string[], centroid: SparseVector): number {
+  return new Set(tokens.filter(token => centroid.has(`u:${token}`))).size;
+}
+
+function clusterDocuments(documents: Document[]): WorkingCluster[] {
+  const clusters: WorkingCluster[] = [];
+
+  documents.forEach(document => {
+    let bestCluster: WorkingCluster | null = null;
+    let bestSimilarity = 0;
+
+    for (const cluster of clusters) {
+      const similarity = cosine(document.vector, cluster.centroid);
+      const overlap = sharedUnigrams(document.tokens, cluster.centroid);
+      if (similarity >= CLUSTER_SIMILARITY && overlap >= 2 && similarity > bestSimilarity) {
+        bestCluster = cluster;
+        bestSimilarity = similarity;
+      }
+    }
+
+    if (bestCluster) {
+      bestCluster.documents.push(document);
+      bestCluster.centroid = meanVector(bestCluster.documents);
+    } else {
+      clusters.push({ documents: [document], centroid: document.vector });
+    }
+  });
+
+  return clusters;
+}
+
+function representativeFor(cluster: WorkingCluster, now: number): Document {
+  return [...cluster.documents].sort((left, right) => {
+    const centrality = (document: Document) =>
+      cluster.documents.reduce((sum, other) => sum + cosine(document.vector, other.vector), 0)
+      + (document.item.sourceType === 'news' ? 0.15 : 0)
+      + Math.max(0, 1 - ((now - document.timestamp) / (24 * 60 * 60 * 1000))) * 0.1;
+    return centrality(right) - centrality(left);
+  })[0];
+}
+
+function clusterScore(cluster: WorkingCluster, now: number): number {
+  const sources = new Set(cluster.documents.map(document => document.item.source));
+  const sourceTypes = new Set(cluster.documents.map(document => document.item.sourceType));
+  const newest = Math.max(...cluster.documents.map(document => document.timestamp));
+  const ageHours = Math.max(0, (now - newest) / (60 * 60 * 1000));
+  const recency = Math.exp(-ageHours / 18);
+  const engagement = cluster.documents.reduce(
+    (sum, document) => sum + Math.log1p(document.item.score || 0),
+    0
+  ) / Math.max(1, cluster.documents.length);
+
+  return (
+    Math.min(sources.size, 6) * 3
+    + Math.log2(Math.min(cluster.documents.length, sources.size + 1) + 1) * 1.5
+    + recency * 2
+    + Math.max(0, sourceTypes.size - 1) * 0.5
+    + Math.min(engagement / 8, 0.75)
+  );
+}
+
+function topKeywords(cluster: WorkingCluster): string[] {
+  const stems = [...cluster.centroid]
+    .filter(([term]) => term.startsWith('u:'))
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([term]) => term.slice(2));
+
+  return stems.map(keywordStem => {
+    for (const document of cluster.documents) {
+      const rawTokens = document.item.title.toLocaleLowerCase()
+        .match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) || [];
+      const match = rawTokens.find(token => stem(token) === keywordStem);
+      if (match) return match;
+    }
+    return keywordStem;
+  });
+}
+
+function coverageLabel(sourceCount: number, itemCount: number): BriefingCluster['coverage'] {
+  if (sourceCount >= 4) return 'broad coverage';
+  if (sourceCount >= 2) return 'multi-source';
+  if (itemCount >= 2) return 'developing';
+  return 'single report';
+}
+
+function uniqueRecentItems(items: FeedItem[], now: number, windowHours: number, maxItems: number): FeedItem[] {
+  const oldestAllowed = now - windowHours * 60 * 60 * 1000;
+  const seen = new Set<string>();
+
+  return [...items]
+    .filter(item => {
+      const timestamp = new Date(item.timestamp).getTime();
+      return item.title.trim().length > 0
+        && item.link.trim().length > 0
+        && Number.isFinite(timestamp)
+        && timestamp <= now + 15 * 60 * 1000
+        && timestamp >= oldestAllowed;
+    })
+    .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
+    .filter(item => {
+      const key = item.title.toLocaleLowerCase().replace(/\W+/g, ' ').trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, maxItems);
+}
+
+export function buildNowBriefing(items: FeedItem[], options: BriefingOptions = {}): NowBriefing {
+  const now = options.now ?? Date.now();
+  const windowHours = options.windowHours ?? DEFAULT_WINDOW_HOURS;
+  const maxItems = options.maxItems ?? DEFAULT_MAX_ITEMS;
+  const maxClusters = options.maxClusters ?? DEFAULT_MAX_CLUSTERS;
+  const currentItems = uniqueRecentItems(items, now, windowHours, maxItems);
+
+  const tokenized = currentItems.map(item => ({ item, tokens: tokenize(item.title) }));
+  const documentFrequency = new Map<string, number>();
+  tokenized.forEach(({ tokens }) => {
+    new Set(termFeatures(tokens)).forEach(term => {
+      documentFrequency.set(term, (documentFrequency.get(term) || 0) + 1);
+    });
+  });
+
+  const documents: Document[] = tokenized
+    .filter(({ tokens }) => tokens.length > 0)
+    .map(({ item, tokens }) => {
+      const featureCounts = new Map<string, number>();
+      termFeatures(tokens).forEach(term => {
+        featureCounts.set(term, (featureCounts.get(term) || 0) + 1);
+      });
+
+      const vector = new Map<string, number>();
+      featureCounts.forEach((count, term) => {
+        const inverseDocumentFrequency = Math.log(
+          (tokenized.length + 1) / ((documentFrequency.get(term) || 0) + 1)
+        ) + 1;
+        const bigramBoost = term.startsWith('b:') ? 1.2 : 1;
+        vector.set(term, (1 + Math.log(count)) * inverseDocumentFrequency * bigramBoost);
+      });
+
+      return {
+        item,
+        tokens,
+        timestamp: new Date(item.timestamp).getTime(),
+        vector: normalizeVector(vector),
+      };
+    });
+
+  const ranked = clusterDocuments(documents)
+    .map(cluster => ({ cluster, score: clusterScore(cluster, now) }))
+    .sort((left, right) => right.score - left.score)
+    .slice(0, maxClusters)
+    .map(({ cluster, score }) => {
+      const representative = representativeFor(cluster, now);
+      const sources = [...new Set(cluster.documents.map(document => document.item.source))];
+      const sourceTypes = [...new Set(cluster.documents.map(document => document.item.sourceType))];
+      const supporting = cluster.documents
+        .filter(document => document.item.id !== representative.item.id)
+        .sort((left, right) => right.timestamp - left.timestamp)
+        .filter((document, index, all) =>
+          all.findIndex(candidate => candidate.item.source === document.item.source) === index
+        )
+        .slice(0, 2)
+        .map(document => ({
+          id: document.item.id,
+          headline: document.item.title,
+          link: document.item.link,
+          source: document.item.source,
+        }));
+
+      return {
+        id: `briefing-${representative.item.id}`,
+        headline: representative.item.title,
+        link: representative.item.link,
+        timestamp: representative.item.timestamp,
+        sources,
+        sourceTypes,
+        keywords: topKeywords(cluster),
+        supporting,
+        itemCount: cluster.documents.length,
+        coverage: coverageLabel(sources.length, cluster.documents.length),
+        score: Number(score.toFixed(3)),
+      };
+    });
+
+  return {
+    generatedAt: new Date(now).toISOString(),
+    analyzedCount: documents.length,
+    windowHours,
+    clusters: ranked,
+  };
+}
+
+export function findRelatedFeedItems(
+  target: FeedItem,
+  items: FeedItem[],
+  limit = 5
+): RelatedFeedItem[] {
+  const targetTokens = new Set(tokenize(target.title));
+  const targetBigrams = new Set(
+    termFeatures([...targetTokens]).filter(feature => feature.startsWith('b:'))
+  );
+  const targetTimestamp = new Date(target.timestamp).getTime();
+  if (targetTokens.size < 2 || !Number.isFinite(targetTimestamp)) return [];
+
+  return items
+    .filter(candidate =>
+      candidate.id !== target.id
+      && candidate.link !== target.link
+      && candidate.source !== target.source
+      && candidate.link.length > 0
+    )
+    .map(candidate => {
+      const candidateTokens = new Set(tokenize(candidate.title));
+      const sharedTerms = [...targetTokens].filter(token => candidateTokens.has(token));
+      const candidateBigrams = new Set(
+        termFeatures([...candidateTokens]).filter(feature => feature.startsWith('b:'))
+      );
+      const sharedBigrams = [...targetBigrams].filter(bigram => candidateBigrams.has(bigram)).length;
+      const smallerSize = Math.min(targetTokens.size, candidateTokens.size);
+      const containment = smallerSize > 0 ? sharedTerms.length / smallerSize : 0;
+      const targetCoverage = sharedTerms.length / targetTokens.size;
+      const timestamp = new Date(candidate.timestamp).getTime();
+      const hoursApart = Number.isFinite(timestamp)
+        ? Math.abs(timestamp - targetTimestamp) / (60 * 60 * 1000)
+        : Number.POSITIVE_INFINITY;
+      const temporalFit = Math.exp(-hoursApart / 24);
+
+      const similarity = (
+        containment * 0.62
+        + targetCoverage * 0.2
+        + Math.min(sharedBigrams, 2) * 0.08
+        + temporalFit * 0.02
+      );
+      const isStrongMatch = sharedTerms.length >= 2
+        && (containment >= 0.38 || sharedBigrams >= 1)
+        && hoursApart <= 48;
+
+      return {
+        item: candidate,
+        similarity: isStrongMatch ? similarity : 0,
+        sharedTerms,
+      };
+    })
+    .filter(result => result.similarity >= 0.34)
+    .sort((left, right) => right.similarity - left.similarity)
+    .slice(0, limit)
+    .map(result => ({
+      ...result,
+      similarity: Number(result.similarity.toFixed(3)),
+    }));
+}

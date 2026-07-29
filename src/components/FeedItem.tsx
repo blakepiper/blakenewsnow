@@ -1,5 +1,4 @@
 import { useCallback } from 'react';
-import type { MouseEvent } from 'react';
 import type { FeedItem as FeedItemType } from '../types';
 import { formatTimeAgo, formatScore, getSourceColor, getCategoryDotColor } from '../utils/formatters';
 
@@ -10,7 +9,6 @@ interface FeedItemProps {
   isSaved?: boolean;
   isNew?: boolean;
   onSelect?: (item: FeedItemType) => void;
-  onMarkAsRead?: (id: string) => void;
 }
 
 export function FeedItem({
@@ -20,33 +18,18 @@ export function FeedItem({
   isSaved = false,
   isNew = false,
   onSelect,
-  onMarkAsRead,
 }: FeedItemProps) {
-  const handleClick = useCallback((e: MouseEvent) => {
-    if (!e.ctrlKey && !e.metaKey && e.button === 0) {
-      e.preventDefault();
-      if (item.link) {
-        window.open(item.link, '_blank', 'noopener,noreferrer');
-        onMarkAsRead?.(item.id);
-      }
-    }
+  const handleClick = useCallback(() => {
     onSelect?.(item);
-  }, [item, onSelect, onMarkAsRead]);
-
-  const handleAuxClick = useCallback((e: MouseEvent) => {
-    if (e.button === 1) {
-      onMarkAsRead?.(item.id);
-    }
-  }, [item.id, onMarkAsRead]);
+  }, [item, onSelect]);
 
   return (
-    <a
-      href={item.link || '#'}
+    <button
+      type="button"
       data-headline
       onClick={handleClick}
-      onAuxClick={handleAuxClick}
       className={`
-        block cursor-pointer transition-colors border-b border-white/5
+        block w-full text-left cursor-pointer transition-colors border-b border-white/5
         ${isSelected ? 'bg-white/10' : 'hover:bg-white/5 active:bg-white/10'}
         ${isRead ? 'opacity-50' : ''}
         ${isNew ? 'new-item-glow headline-enter' : ''}
@@ -62,7 +45,7 @@ export function FeedItem({
           {item.source.length > 12 ? item.source.slice(0, 10) + '..' : item.source}
         </span>
 
-        {/* Score (Reddit/HN) */}
+        {/* Score (social/HN) */}
         {item.score != null && (
           <span className="text-orange-400 shrink-0 w-7 text-right tabular-nums font-medium">
             {formatScore(item.score)}
@@ -74,7 +57,7 @@ export function FeedItem({
           {item.title}
         </span>
 
-        {/* Comments (Reddit/HN) */}
+        {/* Comments (social/HN) */}
         {item.comments != null && (
           <span className="text-white/40 shrink-0 tabular-nums text-[10px]">
             {item.comments}c
@@ -132,6 +115,6 @@ export function FeedItem({
           </span>
         </div>
       </div>
-    </a>
+    </button>
   );
 }

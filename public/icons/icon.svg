@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Blake News Now">
+  <rect width="512" height="512" rx="92" fill="#0f172a"/>
+  <text
+    x="246"
+    y="302"
+    fill="#f20d17"
+    font-family="Arial Black, Arial, Helvetica, sans-serif"
+    font-size="142"
+    font-style="italic"
+    font-weight="900"
+    text-anchor="middle"
+  >BNN</text>
+</svg>

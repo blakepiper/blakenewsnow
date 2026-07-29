@@ -7,6 +7,7 @@ import {
   KeyboardHelp,
   SearchBar,
   Settings,
+  ArticlePreview,
 } from './components';
 import type { FilterType } from './components';
 import { Header } from './components/Header';
@@ -15,7 +16,7 @@ import { Sidebar } from './components/Sidebar';
 import { BottomTabBar } from './components/BottomTabBar';
 import { useSettings, useKeyboard } from './hooks';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
-import type { MobileView } from './types';
+import type { FeedItem, MobileView } from './types';
 import './App.css';
 
 function App() {
@@ -37,6 +38,7 @@ function App() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [activeView, setActiveView] = useState<MobileView>('feed');
+  const [previewItem, setPreviewItem] = useState<FeedItem | null>(null);
 
   // Unified feed
   const enabledSources = useMemo(
@@ -47,7 +49,7 @@ function App() {
     ),
     [settings.sources]
   );
-  const { items, loading, error, newItemIds, refresh } = useUnifiedFeed(enabledSources);
+  const { items, briefingItems, loading, error, newItemIds, refresh } = useUnifiedFeed(enabledSources);
 
   // Filter items for search (flat list for search compatibility)
   const allHeadlines = items.map(item => ({
@@ -56,7 +58,7 @@ function App() {
     source: item.source,
     timestamp: item.timestamp,
     link: item.link,
-    type: item.sourceType === 'social' ? 'reddit' as const : item.sourceType === 'tech' ? 'hackernews' as const : 'headline' as const,
+    type: item.sourceType,
   }));
 
   // Filtered items for keyboard nav count
@@ -67,23 +69,25 @@ function App() {
   });
 
   const handleNavigateUp = useCallback(() => {
-    if (showSearch || showSettings || showKeyboardHelp) return;
+    if (showSearch || showSettings || showKeyboardHelp || previewItem) return;
     setSelectedIndex(prev => Math.max(0, prev - 1));
-  }, [showSearch, showSettings, showKeyboardHelp]);
+  }, [showSearch, showSettings, showKeyboardHelp, previewItem]);
 
   const handleNavigateDown = useCallback(() => {
-    if (showSearch || showSettings || showKeyboardHelp) return;
+    if (showSearch || showSettings || showKeyboardHelp || previewItem) return;
     setSelectedIndex(prev => Math.min(filteredItems.length - 1, prev + 1));
-  }, [showSearch, showSettings, showKeyboardHelp, filteredItems.length]);
+  }, [showSearch, showSettings, showKeyboardHelp, previewItem, filteredItems.length]);
+
+  const handlePreview = useCallback((article: FeedItem) => {
+    setPreviewItem(article);
+    markAsRead(article.id);
+  }, [markAsRead]);
 
   const handleSelect = useCallback(() => {
-    if (showSearch || showSettings || showKeyboardHelp) return;
+    if (showSearch || showSettings || showKeyboardHelp || previewItem) return;
     const article = filteredItems[selectedIndex];
-    if (article?.link) {
-      window.open(article.link, '_blank', 'noopener,noreferrer');
-      markAsRead(article.id);
-    }
-  }, [showSearch, showSettings, showKeyboardHelp, filteredItems, selectedIndex, markAsRead]);
+    if (article?.link) handlePreview(article);
+  }, [showSearch, showSettings, showKeyboardHelp, previewItem, filteredItems, selectedIndex, handlePreview]);
 
   const handleSearch = useCallback(() => {
     if (showSettings || showKeyboardHelp) return;
@@ -91,14 +95,16 @@ function App() {
   }, [showSettings, showKeyboardHelp]);
 
   const handleEscape = useCallback(() => {
-    if (showKeyboardHelp) {
+    if (previewItem) {
+      setPreviewItem(null);
+    } else if (showKeyboardHelp) {
       setShowKeyboardHelp(false);
     } else if (showSearch) {
       setShowSearch(false);
     } else if (showSettings) {
       setShowSettings(false);
     }
-  }, [showKeyboardHelp, showSearch, showSettings]);
+  }, [previewItem, showKeyboardHelp, showSearch, showSettings]);
 
   const handleHelp = useCallback(() => {
     setShowKeyboardHelp(prev => !prev);
@@ -129,12 +135,10 @@ function App() {
   }, [filteredItems, selectedIndex, isInReadingList, addToReadingList, removeFromReadingList]);
 
   const handleSelectFromSearch = useCallback((result: { id: string; link?: string }) => {
-    if (result.link) {
-      window.open(result.link, '_blank', 'noopener,noreferrer');
-      markAsRead(result.id);
-    }
+    const article = items.find(item => item.id === result.id);
+    if (article) handlePreview(article);
     setShowSearch(false);
-  }, [markAsRead]);
+  }, [items, handlePreview]);
 
   // Keyboard navigation
   useKeyboard({
@@ -170,16 +174,17 @@ function App() {
         <div className={`flex-1 overflow-hidden ${activeView !== 'feed' ? 'hidden md:block' : ''}`}>
           <UnifiedFeed
             items={items}
+            briefingItems={briefingItems}
             loading={loading}
             error={error}
             filter={activeFilter}
             selectedIndex={selectedIndex}
             onSelectIndex={setSelectedIndex}
-            onMarkAsRead={markAsRead}
             readArticles={settings.readArticles}
             savedArticles={settings.readingList}
             newItemIds={newItemIds}
             onRefresh={refresh}
+            onPreview={handlePreview}
           />
         </div>
 
@@ -279,6 +284,12 @@ function App() {
           onUpdateLocation={updateLocation}
         />
       )}
+
+      <ArticlePreview
+        item={previewItem}
+        alternatives={briefingItems}
+        onClose={() => setPreviewItem(null)}
+      />
     </div>
   );
 }

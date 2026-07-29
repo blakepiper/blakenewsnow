@@ -14,6 +14,27 @@ function stableId(prefix, title, source) {
   return `${prefix}-${hash}`;
 }
 
+function selectDiverseItems(items, limit, perSourceCap) {
+  const selected = [];
+  const deferred = [];
+  const sourceCounts = new Map();
+
+  for (const item of items) {
+    const count = sourceCounts.get(item.source) || 0;
+    if (count < perSourceCap && selected.length < limit) {
+      selected.push(item);
+      sourceCounts.set(item.source, count + 1);
+    } else {
+      deferred.push(item);
+    }
+  }
+
+  if (selected.length < limit) {
+    selected.push(...deferred.slice(0, limit - selected.length));
+  }
+  return selected.slice(0, limit);
+}
+
 // ============================================
 // RSS Feed Configuration
 // ============================================
@@ -21,6 +42,8 @@ const RSS_FEEDS = {
   headlines: [
     { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml' },
     { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
+    { name: 'CBC News', url: 'https://www.cbc.ca/cmlink/rss-world' },
+    { name: 'DW', url: 'https://rss.dw.com/rdf/rss-en-top' },
     { name: 'Guardian', url: 'https://www.theguardian.com/world/rss' },
     { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml' },
     { name: 'ABC News', url: 'https://abcnews.go.com/abcnews/topstories' },
@@ -32,9 +55,10 @@ const RSS_FEEDS = {
     { name: 'The Hill', url: 'https://thehill.com/feed/' },
     { name: 'Vox', url: 'https://www.vox.com/rss/index.xml' },
     { name: 'Fox News', url: 'https://moxie.foxnews.com/google-publisher/us.xml' },
-    { name: 'Politico', url: 'https://rss.politico.com/politics-news.xml' },
+    { name: 'Politico', url: 'https://rss.politico.com/congress.xml' },
+    { name: 'Semafor', url: 'https://www.semafor.com/rss.xml' },
     { name: 'The Intercept', url: 'https://theintercept.com/feed/' },
-    { name: 'ProPublica', url: 'http://feeds.propublica.org/propublica/main' },
+    { name: 'ProPublica', url: 'https://feeds.propublica.org/propublica/main' },
     { name: 'Foreign Policy', url: 'https://foreignpolicy.com/feed/' },
     { name: 'Breitbart', url: 'https://feeds.feedburner.com/breitbart' },
   ],
@@ -42,8 +66,25 @@ const RSS_FEEDS = {
     { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
     { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
     { name: 'TechCrunch', url: 'https://techcrunch.com/feed/' },
-    { name: 'Wired', url: 'https://www.wired.com/feed/rss' },
+    {
+      name: 'Wired',
+      url: 'https://www.wired.com/feed/rss',
+      filter: item => !/(promo codes?|coupons?|discount codes?|deals? for)/i.test(item.title),
+    },
     { name: 'Lobsters', url: 'https://lobste.rs/rss' },
+    { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/' },
+    {
+      name: 'BleepingComputer',
+      url: 'https://www.bleepingcomputer.com/feed/',
+      headers: { 'User-Agent': 'BlakeNewsNow/0.4 (RSS reader)' },
+    },
+    { name: 'Rest of World', url: 'https://restofworld.org/feed/latest/' },
+    { name: 'The Register', url: 'https://www.theregister.com/headlines.atom' },
+    {
+      name: '404 Media',
+      url: 'https://www.404media.co/rss/',
+      filter: item => !/^podcast:/i.test(item.title),
+    },
   ],
   ticker: [
     { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml' },
@@ -53,8 +94,7 @@ const RSS_FEEDS = {
   ],
 };
 
-// Reddit subreddits to fetch
-const REDDIT_SUBREDDITS = ['news', 'worldnews', 'technology'];
+const LEMMY_COMMUNITIES = ['news', 'world', 'technology'];
 
 // Hacker News API base
 const HN_API = 'https://hacker-news.firebaseio.com/v0';
@@ -72,7 +112,7 @@ const cache = {
   weather: { data: null, timestamp: 0 },
   radar: { data: null, timestamp: 0 },
   predictions: { data: null, timestamp: 0 },
-  reddit: { data: null, timestamp: 0 },
+  lemmy: { data: null, timestamp: 0 },
   hackernews: { data: null, timestamp: 0 },
   fourchan: { data: null, timestamp: 0 },
   geocode: {},  // zip -> {lat, lon} cache
@@ -87,7 +127,7 @@ const CACHE_TTL = {
   weather: 5 * 60 * 1000, // 5 minutes
   radar: 2 * 60 * 1000,   // 2 minutes
   predictions: 60 * 1000, // 1 minute
-  reddit: 5 * 60 * 1000,  // 5 minutes; Reddit throttles anonymous RSS aggressively
+  lemmy: 2 * 60 * 1000,
   hackernews: 2 * 60 * 1000, // 2 minutes
   fourchan: 2 * 60 * 1000,   // 2 minutes
 };
@@ -132,19 +172,13 @@ function fetch(url, options = {}, redirectCount = 0) {
     const parsedUrl = new URL(url);
     const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
-    // Special User-Agent for Reddit (they block generic ones)
-    const isReddit = parsedUrl.hostname.includes('reddit.com');
-    const userAgent = isReddit
-      ? 'BlakeNewsNow/1.0 by u/blake'
-      : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
     const reqOptions = {
       hostname: parsedUrl.hostname,
       port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
       path: parsedUrl.pathname + parsedUrl.search,
       method: options.method || 'GET',
       headers: {
-        'User-Agent': userAgent,
+        'User-Agent': 'Mozilla/5.0',
         'Accept': options.accept || '*/*',
         ...options.headers,
       },
@@ -210,7 +244,10 @@ async function fetchHeadlines() {
   const feedResults = await Promise.all(
     RSS_FEEDS.headlines.map(async (feed) => {
       try {
-        const { data } = await fetch(feed.url, { accept: 'application/rss+xml, application/xml, text/xml' });
+        const { data } = await fetch(feed.url, {
+          accept: 'application/rss+xml, application/xml, text/xml',
+          headers: feed.headers,
+        });
         const parsedItems = parseRSS(data, feed.name);
         let items = filterRecentItems(parsedItems, { maxAgeMs: CONTENT_MAX_AGE.headlines });
         if (items.length < parsedItems.length) {
@@ -246,12 +283,13 @@ async function fetchHeadlines() {
     return true;
   });
 
-  const result = unique.slice(0, 50).map((item) => ({
+  const result = selectDiverseItems(unique, 50, 5).map((item) => ({
     id: stableId('headline', item.title, item.source),
     title: item.title,
     source: item.source,
     timestamp: item.pubDate.toISOString(),
     link: item.link,
+    description: item.description,
   }));
 
   cache.headlines = { data: result, timestamp: Date.now() };
@@ -272,7 +310,10 @@ async function fetchTicker() {
   const feedResults = await Promise.all(
     RSS_FEEDS.ticker.map(async (feed) => {
       try {
-        const { data } = await fetch(feed.url, { accept: 'application/rss+xml, application/xml, text/xml' });
+        const { data } = await fetch(feed.url, {
+          accept: 'application/rss+xml, application/xml, text/xml',
+          headers: feed.headers,
+        });
         return filterRecentItems(parseRSS(data, feed.name), { maxAgeMs: CONTENT_MAX_AGE.ticker });
       } catch (err) {
         console.error(`[DATA] Ticker ${feed.name} failed:`, err.message);
@@ -286,7 +327,15 @@ async function fetchTicker() {
   // Sort by date and take recent items
   allItems.sort((a, b) => b.pubDate - a.pubDate);
 
-  const result = allItems.slice(0, 30).map((item, idx) => ({
+  const seen = new Set();
+  const unique = allItems.filter(item => {
+    const key = item.title.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const result = selectDiverseItems(unique, 30, 8).map((item, idx) => ({
     id: `ticker-${idx}`,
     text: item.title,
     source: item.source,
@@ -1006,9 +1055,22 @@ async function fetchTechNews() {
   const feedResults = await Promise.all(
     RSS_FEEDS.tech.map(async (feed) => {
       try {
-        const { data } = await fetch(feed.url, { accept: 'application/rss+xml, application/xml, text/xml' });
+        const { data } = await fetch(feed.url, {
+          accept: 'application/rss+xml, application/xml, text/xml',
+          headers: feed.headers,
+        });
         const parsedItems = parseRSS(data, feed.name);
-        const items = filterRecentItems(parsedItems, { maxAgeMs: CONTENT_MAX_AGE.tech });
+        let items = filterRecentItems(parsedItems, { maxAgeMs: CONTENT_MAX_AGE.tech });
+        if (items.length < parsedItems.length) {
+          console.log(`[DATA] ${feed.name}: dropped ${parsedItems.length - items.length} stale, undated, or invalid items`);
+        }
+        if (feed.filter) {
+          const before = items.length;
+          items = items.filter(feed.filter);
+          if (items.length < before) {
+            console.log(`[DATA] ${feed.name}: filtered ${before - items.length} junk items`);
+          }
+        }
         console.log(`[DATA] ${feed.name}: ${items.length} items`);
         return items;
       } catch (err) {
@@ -1030,7 +1092,7 @@ async function fetchTechNews() {
     return true;
   });
 
-  const result = unique.slice(0, 50).map((item) => ({
+  const result = selectDiverseItems(unique, 50, 6).map((item) => ({
     id: stableId('tech', item.title, item.source),
     title: item.title,
     source: item.source,
@@ -1044,53 +1106,91 @@ async function fetchTechNews() {
 }
 
 // ============================================
-// Fetch Reddit Posts
+// Fetch Lemmy Posts
 // ============================================
-async function fetchReddit() {
-  if (isCacheValid('reddit')) {
-    return cache.reddit.data;
+async function fetchLemmy() {
+  if (isCacheValid('lemmy')) {
+    return cache.lemmy.data;
   }
 
-  console.log('[DATA] Fetching Reddit...');
+  console.log('[DATA] Fetching Lemmy...');
 
-  try {
-    // One combined Atom request avoids the 403s and 429s caused by three
-    // anonymous JSON requests. OAuth can be added later if scores are needed.
-    const joinedSubreddits = REDDIT_SUBREDDITS.join('+');
-    const url = `https://www.reddit.com/r/${joinedSubreddits}/.rss?limit=75`;
-    const { data } = await fetch(url, {
-      headers: {
-        'Accept': 'application/atom+xml, application/xml, text/xml',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      timeout: 10000,
-    });
+  const communityResults = await Promise.all(
+    LEMMY_COMMUNITIES.map(async community => {
+      try {
+        const url = `https://lemmy.world/api/v3/post/list?community_name=${encodeURIComponent(community)}&sort=Hot&limit=25`;
+        const { data } = await fetch(url, {
+          accept: 'application/json',
+          timeout: 10000,
+        });
+        const document = JSON.parse(data);
+        const now = Date.now();
+        const posts = (document.posts || []).flatMap(view => {
+          const post = view.post || {};
+          const counts = view.counts || {};
+          const timestamp = new Date(post.published);
+          const timestampMs = timestamp.getTime();
+          if (
+            !post.id ||
+            !post.name ||
+            post.deleted ||
+            post.removed ||
+            post.nsfw ||
+            !Number.isFinite(timestampMs) ||
+            timestampMs > now + 15 * 60 * 1000 ||
+            timestampMs < now - CONTENT_MAX_AGE.headlines
+          ) {
+            return [];
+          }
 
-    const parsedItems = filterRecentItems(parseRSS(data, 'Reddit'), {
-      maxAgeMs: CONTENT_MAX_AGE.headlines,
-    });
-    const result = parsedItems.slice(0, 45).map(item => {
-      const subreddit = item.link.match(/reddit\.com\/r\/([^/]+)/i)?.[1] || 'news';
-      return {
-        id: stableId('reddit', item.title, subreddit),
-        title: item.title,
-        source: `r/${subreddit}`,
-        subreddit,
-        url: item.link,
-        permalink: item.link,
-        timestamp: item.pubDate.toISOString(),
-      };
-    });
+          const discussionUrl = post.ap_id || `https://lemmy.world/post/${post.id}`;
+          const score = Number(counts.score) || 0;
+          const comments = Number(counts.comments) || 0;
+          const ageHours = Math.max(0, (now - timestampMs) / (60 * 60 * 1000));
 
-    console.log(`[REDDIT] Combined feed: ${result.length} posts`);
-    if (result.length > 0) {
-      cache.reddit = { data: result, timestamp: Date.now() };
-    }
+          return [{
+            id: stableId('lemmy', String(post.id), community),
+            title: stripHtml(decodeEntities(post.name)),
+            source: `c/${community}`,
+            community,
+            score,
+            comments,
+            url: post.url || discussionUrl,
+            permalink: discussionUrl,
+            timestamp: timestamp.toISOString(),
+            description: stripHtml(decodeEntities(post.embed_description || post.body || '')).slice(0, 1200),
+            rank: (score + (comments * 0.5) + 1) * Math.exp(-ageHours / 36),
+          }];
+        });
+        console.log(`[LEMMY] c/${community}: ${posts.length} current posts`);
+        return posts;
+      } catch (err) {
+        console.error(`[LEMMY] c/${community} failed:`, err.message);
+        return [];
+      }
+    })
+  );
+
+  const allPosts = communityResults.flat().sort((a, b) => b.rank - a.rank);
+  const seen = new Set();
+  const unique = allPosts.filter(post => {
+    const key = `${post.url || ''}|${post.title.toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const result = selectDiverseItems(unique, 45, 15).map(({ rank, ...post }) => post);
+
+  if (result.length > 0) {
+    cache.lemmy = { data: result, timestamp: Date.now() };
     return result;
-  } catch (err) {
-    console.error('[REDDIT]', err.message);
-    return cache.reddit.data || [];
   }
+
+  if (cache.lemmy.data) {
+    console.warn('[LEMMY] All communities failed; returning the last successful response');
+    return cache.lemmy.data;
+  }
+  return [];
 }
 
 // ============================================
@@ -1160,7 +1260,7 @@ async function fetchFourChan() {
 
   console.log('[DATA] Fetching 4chan...');
 
-  const boards = ['news', 'pol'];
+  const boards = ['news', 'pol', 'lit'];
   const allThreads = [];
 
   // Fetch boards sequentially to respect 4chan rate limit (1 req/sec)
@@ -1206,9 +1306,9 @@ async function fetchFourChan() {
     }
   }
 
-  // Sort by reply count descending, take top 40
+  // Sort by reply count, while preventing a single board from consuming the list.
   allThreads.sort((a, b) => b.replies - a.replies);
-  const result = allThreads.slice(0, 40);
+  const result = selectDiverseItems(allThreads, 40, 14);
 
   if (result.length > 0) {
     cache.fourchan = { data: result, timestamp: Date.now() };
@@ -1300,12 +1400,12 @@ function registerRoutes(app) {
     }
   });
 
-  app.get('/api/reddit', async (req, res) => {
+  app.get('/api/lemmy', async (req, res) => {
     try {
-      const data = await dedupeRequest('reddit', fetchReddit);
+      const data = await dedupeRequest('lemmy', fetchLemmy);
       res.json(data);
     } catch (err) {
-      console.error('[API] Reddit error:', err);
+      console.error('[API] Lemmy error:', err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1340,7 +1440,22 @@ function registerRoutes(app) {
     }
   });
 
-  console.log('[DATA] API routes registered: /api/headlines, /api/ticker, /api/markets, /api/crypto, /api/weather, /api/radar, /api/predictions, /api/reddit, /api/hackernews, /api/4chan, /api/tech');
+  console.log('[DATA] API routes registered: /api/headlines, /api/ticker, /api/markets, /api/crypto, /api/weather, /api/radar, /api/predictions, /api/lemmy, /api/hackernews, /api/4chan, /api/tech');
 }
 
-module.exports = { registerRoutes, fetchHeadlines, fetchTicker, fetchMarkets, fetchCrypto, fetchWeather, fetchRadarData, fetchPredictions, fetchReddit, fetchHackerNews, fetchFourChan, fetchTechNews };
+module.exports = {
+  RSS_FEEDS,
+  selectDiverseItems,
+  registerRoutes,
+  fetchHeadlines,
+  fetchTicker,
+  fetchMarkets,
+  fetchCrypto,
+  fetchWeather,
+  fetchRadarData,
+  fetchPredictions,
+  fetchLemmy,
+  fetchHackerNews,
+  fetchFourChan,
+  fetchTechNews,
+};

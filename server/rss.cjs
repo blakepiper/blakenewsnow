@@ -95,7 +95,11 @@ function parseRSS(xml, sourceName) {
   }
 
   const channel = document?.rss?.channel;
-  const entries = channel ? asArray(channel.item) : asArray(document?.feed?.entry);
+  const entries = channel
+    ? asArray(channel.item)
+    : document?.feed
+      ? asArray(document.feed.entry)
+      : asArray(document?.['rdf:RDF']?.item);
 
   return entries.flatMap(entry => {
     if (!entry || typeof entry !== 'object') return [];
@@ -114,7 +118,7 @@ function parseRSS(xml, sourceName) {
       link,
       pubDate: date,
       dateSource,
-      description: decodeEntities(stripHtml(descriptionRaw)).slice(0, 200),
+      description: decodeEntities(stripHtml(descriptionRaw)).slice(0, 1200),
       source: sourceName,
     }];
   });

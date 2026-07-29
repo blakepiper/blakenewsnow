@@ -37,6 +37,27 @@ test('parses Atom alternate links and updated dates', () => {
   assert.equal(items[0].pubDate.toISOString(), '2026-07-29T10:00:00.000Z');
 });
 
+test('parses RDF/RSS 1.0 feeds used by international publishers', () => {
+  const xml = `
+    <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+      xmlns:dc="http://purl.org/dc/elements/1.1/">
+      <channel><title>World News</title></channel>
+      <item rdf:about="https://example.com/world-story">
+        <title>International headline</title>
+        <link>https://example.com/world-story</link>
+        <description>Useful international reporting context.</description>
+        <dc:date>2026-07-29T12:00:00Z</dc:date>
+      </item>
+    </rdf:RDF>`;
+
+  const items = parseRSS(xml, 'RDF Source');
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].title, 'International headline');
+  assert.equal(items[0].link, 'https://example.com/world-story');
+  assert.equal(items[0].pubDate.toISOString(), '2026-07-29T12:00:00.000Z');
+});
+
 test('never promotes an undated item to the current time', () => {
   const [item] = parseRSS(`
     <rss><channel><item>

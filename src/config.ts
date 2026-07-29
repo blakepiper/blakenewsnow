@@ -15,7 +15,7 @@ export const REFRESH_INTERVALS = {
   weather: 5 * 60 * 1000,    // 5 minutes
   radar: 2 * 60 * 1000,      // 2 minutes
   predictions: 60 * 1000,    // 1 minute
-  reddit: 2 * 60 * 1000,     // 2 minutes
+  social: 2 * 60 * 1000,     // 2 minutes
   hackernews: 2 * 60 * 1000, // 2 minutes
   search: 60 * 1000,         // 1 minute
 } as const;
@@ -37,6 +37,6 @@ export const UI_TIMING = {
 export const DEFAULTS = {
   zip: '22314',
   maxHeadlines: 50,
-  maxRedditItems: 30,
+  maxSocialItems: 45,
   maxHNItems: 30,
 } as const;

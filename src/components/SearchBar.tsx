@@ -7,7 +7,7 @@ interface SearchResult {
   source: string;
   timestamp: string;
   link?: string;
-  type?: 'headline' | 'reddit' | 'hackernews';
+  type?: 'news' | 'social' | 'tech';
 }
 
 interface SearchBarProps {
