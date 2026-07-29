@@ -2,7 +2,7 @@ import type { FeedItem } from '../types';
 
 const DEFAULT_WINDOW_HOURS = 36;
 const DEFAULT_MAX_ITEMS = 180;
-const DEFAULT_MAX_CLUSTERS = 5;
+const DEFAULT_MAX_CLUSTERS = 6;
 const CLUSTER_SIMILARITY = 0.16;
 
 const STOP_WORDS = new Set([
@@ -271,7 +271,7 @@ export function buildNowBriefing(items: FeedItem[], options: BriefingOptions = {
       };
     });
 
-  const ranked = clusterDocuments(documents)
+  const ranked: BriefingCluster[] = clusterDocuments(documents)
     .map(cluster => ({ cluster, score: clusterScore(cluster, now) }))
     .sort((left, right) => right.score - left.score)
     .slice(0, maxClusters)
@@ -307,6 +307,31 @@ export function buildNowBriefing(items: FeedItem[], options: BriefingOptions = {
         score: Number(score.toFixed(3)),
       };
     });
+
+  // A heavily concentrated news cycle can collapse into fewer than the requested
+  // number of clusters. Fill the remaining briefing cells with the newest distinct
+  // reports so every filter page uses the complete six-cell layout without
+  // inventing text or links.
+  const selectedLinks = new Set(ranked.map(cluster => cluster.link));
+  const fallbackDocuments = [...documents].sort((left, right) => right.timestamp - left.timestamp);
+  for (const document of fallbackDocuments) {
+    if (ranked.length >= maxClusters) break;
+    if (selectedLinks.has(document.item.link)) continue;
+    selectedLinks.add(document.item.link);
+    ranked.push({
+      id: `briefing-fallback-${document.item.id}`,
+      headline: document.item.title,
+      link: document.item.link,
+      timestamp: document.item.timestamp,
+      sources: [document.item.source],
+      sourceTypes: [document.item.sourceType],
+      keywords: document.tokens.slice(0, 3),
+      supporting: [],
+      itemCount: 1,
+      coverage: 'single report',
+      score: 0,
+    });
+  }
 
   return {
     generatedAt: new Date(now).toISOString(),

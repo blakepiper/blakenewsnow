@@ -29,7 +29,7 @@ export const ANIMATION_INTERVALS = {
 
 // UI Timing
 export const UI_TIMING = {
-  feedbackDuration: 2000,    // 2 seconds for "Saved!" messages
+  feedbackDuration: 2000,    // 2 seconds for transient confirmation messages
   debounceDelay: 300,        // 300ms debounce for search
 } as const;
 

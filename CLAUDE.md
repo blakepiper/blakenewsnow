@@ -16,7 +16,7 @@ Dense 3-column layout optimized for information density:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ BNN  [All][News][Tech][Social][Saved]           [🔍][?][⚙]  │
+│ BNN  [All][News][Tech][Social]                  [🔍][?][⚙]  │
 ├──────────────────┬─────────────────┬────────────────────────┤
 │                  │                 │                        │
 │   HEADLINES      │  SOCIAL NEWS    │    HACKER NEWS         │
@@ -50,7 +50,7 @@ src/
 │   ├── Predictions.tsx    # Polymarket + pizzint.watch predictions
 │   ├── Financial.tsx      # Markets + crypto
 │   ├── Ticker.tsx         # Scrolling ticker
-│   ├── FilterPills.tsx    # Quick filters (All/News/Tech/Social/Saved)
+│   ├── FilterPills.tsx    # Quick filters (All/News/Tech/Social)
 │   ├── SearchBar.tsx      # Global search (/)
 │   ├── Settings.tsx       # Settings modal
 │   ├── KeyboardHelp.tsx   # Keyboard shortcuts help
@@ -102,15 +102,14 @@ server/
 | `/` | Search |
 | `?` | Keyboard shortcuts |
 | `Ctrl+,` | Settings |
-| `Ctrl+S` | Save/unsave article |
-| `1-5` | Jump to section |
+| `1-4` | Jump to section |
 | `Esc` | Close modal |
 
 ## Features
 
 - **Text-only article preview**: Click → sandboxed reader, with an explicit source link
 - **Read/unread state**: Read articles dimmed, persisted in localStorage
-- **Filter pills**: Quick filter by category (News/Tech/Social/Saved)
+- **Filter pills**: Quick filter by category (News/Tech/Social)
 - **Dense layout**: Single-line items, maximum information density
 - **Keyboard navigation**: Full keyboard support for power users
 - **Live data**: Auto-refresh for all data sources
@@ -119,11 +118,11 @@ server/
 
 ### Completed
 - [x] Settings/preferences system (localStorage)
-- [x] Keyboard navigation (j/k, Enter, /, ?, Esc, 1-5)
+- [x] Keyboard navigation (j/k, Enter, /, ?, Esc, 1-4)
 - [x] Federated social-news integration (Lemmy c/news, c/world, c/technology)
 - [x] Hacker News integration
 - [x] Global search with fuzzy matching
-- [x] Filter pills (All/News/Tech/Social/Saved)
+- [x] Filter pills (All/News/Tech/Social)
 - [x] Read/unread visual state
 - [x] Sandboxed, text-only article preview with source fallbacks
 - [x] Dense single-line layout for all feeds

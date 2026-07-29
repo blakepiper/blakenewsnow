@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Settings, SourceConfig } from '../stores/settings';
+import type { PaneSizes, Settings, SourceConfig } from '../stores/settings';
 import {
   loadSettings,
   saveSettings,
@@ -7,9 +7,8 @@ import {
   updateLocation,
   addCustomFeed,
   removeCustomFeed,
-  addToReadingList,
-  removeFromReadingList,
   markAsRead,
+  updatePaneSize,
 } from '../stores/settings';
 
 export function useSettings() {
@@ -40,14 +39,6 @@ export function useSettings() {
     setSettings(prev => removeCustomFeed(prev, feedId));
   }, []);
 
-  const handleAddToReadingList = useCallback((articleId: string) => {
-    setSettings(prev => addToReadingList(prev, articleId));
-  }, []);
-
-  const handleRemoveFromReadingList = useCallback((articleId: string) => {
-    setSettings(prev => removeFromReadingList(prev, articleId));
-  }, []);
-
   const handleMarkAsRead = useCallback((articleId: string) => {
     setSettings(prev => markAsRead(prev, articleId));
   }, []);
@@ -65,16 +56,16 @@ export function useSettings() {
     }));
   }, []);
 
+  const handleResizePane = useCallback((pane: keyof PaneSizes, delta: number) => {
+    setSettings(prev => updatePaneSize(prev, pane, prev.paneSizes[pane] + delta));
+  }, []);
+
   const handleReorderSources = useCallback((sources: SourceConfig[]) => {
     setSettings(prev => ({
       ...prev,
       sources: sources.map((s, idx) => ({ ...s, priority: idx })),
     }));
   }, []);
-
-  const isInReadingList = useCallback((articleId: string) => {
-    return settings.readingList.includes(articleId);
-  }, [settings.readingList]);
 
   const isRead = useCallback((articleId: string) => {
     return settings.readArticles.includes(articleId);
@@ -87,13 +78,11 @@ export function useSettings() {
     updateLocation: handleUpdateLocation,
     addCustomFeed: handleAddCustomFeed,
     removeCustomFeed: handleRemoveCustomFeed,
-    addToReadingList: handleAddToReadingList,
-    removeFromReadingList: handleRemoveFromReadingList,
     markAsRead: handleMarkAsRead,
     setLayout: handleSetLayout,
     toggleSection: handleToggleSection,
+    resizePane: handleResizePane,
     reorderSources: handleReorderSources,
-    isInReadingList,
     isRead,
   };
 }

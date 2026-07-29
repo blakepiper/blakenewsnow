@@ -41,7 +41,6 @@ Set `CORS_ORIGIN` to a comma-separated list of frontend origins when the UI is h
 - React DOM 17.0.2
 - Material-UI core 4.12.4
 - Material-UI icons 4.11.3
-- React Three Fiber 7.0.29
 
 ## Current-feed guarantees
 
@@ -57,6 +56,10 @@ The server applies the following rules before a headline can reach the display:
 - Coalesce simultaneous requests so several open clients do not stampede upstream feeds.
 
 The client repeats the date, link, and freshness checks as a second line of defense. On desktop, the two-column feed uses row-major order: ranks 1 and 2 share the first row, ranks 3 and 4 share the second, and so on.
+
+The What's Happening Now panel fills six cells on every feed filter when at least six
+current reports are available. Desktop pane dimensions are draggable and persist in
+local settings: drag the divider beside the dashboard or the handles below its panes.
 
 ## Material-UI 4 learning map
 
@@ -124,8 +127,7 @@ Other data comes from the National Weather Service, RainViewer, Yahoo Finance, C
 | `/` | Search |
 | `?` | Keyboard shortcuts |
 | `Ctrl+,` | Settings |
-| `Ctrl+S` | Save selected story |
-| `1-5` | Change feed filter |
+| `1-4` | Change feed filter |
 | `Esc` | Close the active dialog |
 
 ## Architecture

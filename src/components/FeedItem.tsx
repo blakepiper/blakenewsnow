@@ -6,7 +6,6 @@ interface FeedItemProps {
   item: FeedItemType;
   isSelected?: boolean;
   isRead?: boolean;
-  isSaved?: boolean;
   isNew?: boolean;
   onSelect?: (item: FeedItemType) => void;
 }
@@ -15,7 +14,6 @@ export function FeedItem({
   item,
   isSelected = false,
   isRead = false,
-  isSaved = false,
   isNew = false,
   onSelect,
 }: FeedItemProps) {
@@ -64,9 +62,6 @@ export function FeedItem({
           </span>
         )}
 
-        {/* Saved indicator */}
-        {isSaved && <span className="text-yellow-400 shrink-0">★</span>}
-
         {/* Time */}
         <span className="text-white/40 shrink-0 w-6 text-right tabular-nums">
           {formatTimeAgo(item.timestamp)}
@@ -105,9 +100,6 @@ export function FeedItem({
           )}
 
           <span className="flex-1" />
-
-          {/* Saved */}
-          {isSaved && <span className="text-yellow-400">★</span>}
 
           {/* Time */}
           <span className="text-white/40 tabular-nums">

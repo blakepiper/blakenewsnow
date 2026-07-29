@@ -9,6 +9,9 @@ interface Prediction {
   volumeDisplay: string;
   category: string;
   slug?: string;
+  url: string;
+  source: 'Polymarket' | 'pizzint.watch';
+  endDate?: string | null;
 }
 
 function getCategoryColor(category: string): string {
@@ -25,22 +28,33 @@ function getCategoryColor(category: string): string {
 export function Predictions() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function fetchPredictions() {
       try {
-        const res = await fetch(`${API_BASE}/api/predictions`);
+        const res = await fetch(`${API_BASE}/api/predictions`, { signal: controller.signal });
         if (!res.ok) throw new Error('Failed to fetch');
-        setPredictions(await res.json());
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error('Invalid response');
+        setPredictions(data);
         setError(null);
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error('Predictions fetch error:', err);
         setError('Unable to load');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     fetchPredictions();
     const interval = setInterval(fetchPredictions, REFRESH_INTERVALS.predictions);
-    return () => clearInterval(interval);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, []);
 
   // Group by category
@@ -61,10 +75,12 @@ export function Predictions() {
   return (
     <div className="h-full flex flex-col overflow-hidden min-h-0">
       <div className="flex-1 overflow-y-auto px-3 py-1 md:px-2 md:py-0.5 min-h-0">
-        {error ? (
+        {loading ? (
+          <div className="text-white/40 text-xs py-2">Loading predictions...</div>
+        ) : error ? (
           <div className="text-white/40 text-xs py-2">{error}</div>
         ) : predictions.length === 0 ? (
-          <div className="text-white/40 text-xs py-2">Loading predictions...</div>
+          <div className="text-white/40 text-xs py-2">No active prediction markets</div>
         ) : (
           <div className="space-y-2 md:space-y-1">
             {Object.entries(byCategory).map(([category, preds]) => (
@@ -75,9 +91,10 @@ export function Predictions() {
                 {preds.map((pred) => (
                   <a
                     key={pred.id}
-                    href={pred.slug ? `https://polymarket.com/event/${pred.slug}` : '#'}
+                    href={pred.url}
                     target="_blank"
                     rel="noopener noreferrer"
+                    title={`Open on ${pred.source}`}
                     className="block py-1.5 md:py-1 hover:bg-white/5 active:bg-white/10 rounded px-1 -mx-1 transition-colors"
                   >
                     <div className="flex items-center gap-2 text-[11px] md:text-[10px] leading-tight">
@@ -98,7 +115,9 @@ export function Predictions() {
                           style={{ width: `${pred.yesPrice}%` }}
                         />
                       </div>
-                      <span className="text-white/30 text-[9px] tabular-nums shrink-0">{pred.volumeDisplay}</span>
+                      <span className="text-white/30 text-[9px] tabular-nums shrink-0">
+                        {pred.source === 'Polymarket' ? 'PM' : 'PI'} · {pred.volumeDisplay}
+                      </span>
                     </div>
                   </a>
                 ))}

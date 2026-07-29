@@ -14,7 +14,6 @@ interface UnifiedFeedProps {
   selectedIndex: number;
   onSelectIndex: (index: number) => void;
   readArticles: string[];
-  savedArticles: string[];
   newItemIds: Set<string>;
   onRefresh: () => void;
   onPreview: (item: FeedItemType) => void;
@@ -41,7 +40,6 @@ export function UnifiedFeed({
   selectedIndex,
   onSelectIndex,
   readArticles,
-  savedArticles,
   newItemIds,
   onRefresh,
   onPreview,
@@ -56,12 +54,10 @@ export function UnifiedFeed({
   // Filter items
   const filteredItems = items.filter(item => {
     if (filter === 'all') return true;
-    if (filter === 'saved') return savedArticles.includes(item.id);
     return item.sourceType === filter;
   });
   const filteredBriefingItems = briefingItems.filter(item => {
     if (filter === 'all') return true;
-    if (filter === 'saved') return savedArticles.includes(item.id);
     return item.sourceType === filter;
   });
 
@@ -119,7 +115,7 @@ export function UnifiedFeed({
   if (filteredItems.length === 0) {
     return (
       <div className="px-3 py-8 text-center text-white/50 text-sm">
-        {filter === 'saved' ? 'No saved articles.' : 'No items to show.'}
+        No items to show.
       </div>
     );
   }
@@ -149,7 +145,6 @@ export function UnifiedFeed({
             item={item}
             isSelected={selectedIndex === index}
             isRead={readArticles.includes(item.id)}
-            isSaved={savedArticles.includes(item.id)}
             isNew={newItemIds.has(item.id)}
             onSelect={item => {
               onSelectIndex(index);
@@ -174,7 +169,6 @@ export function UnifiedFeed({
             item={item}
             isSelected={selectedIndex === index}
             isRead={readArticles.includes(item.id)}
-            isSaved={savedArticles.includes(item.id)}
             isNew={newItemIds.has(item.id)}
             onSelect={item => {
               onSelectIndex(index);

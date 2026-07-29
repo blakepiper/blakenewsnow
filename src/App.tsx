@@ -13,6 +13,7 @@ import type { FilterType } from './components';
 import { Header } from './components/Header';
 import { UnifiedFeed } from './components/UnifiedFeed';
 import { Sidebar } from './components/Sidebar';
+import { PaneResizeHandle } from './components/PaneResizeHandle';
 import { BottomTabBar } from './components/BottomTabBar';
 import { useSettings, useKeyboard } from './hooks';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
@@ -24,11 +25,9 @@ function App() {
     settings,
     toggleSource,
     updateLocation,
-    addToReadingList,
-    removeFromReadingList,
-    isInReadingList,
     markAsRead,
     toggleSection,
+    resizePane,
   } = useSettings();
 
   // UI State
@@ -64,7 +63,6 @@ function App() {
   // Filtered items for keyboard nav count
   const filteredItems = items.filter(item => {
     if (activeFilter === 'all') return true;
-    if (activeFilter === 'saved') return settings.readingList.includes(item.id);
     return item.sourceType === activeFilter;
   });
 
@@ -116,23 +114,11 @@ function App() {
     else if (section === 2) setActiveFilter('news');
     else if (section === 3) setActiveFilter('tech');
     else if (section === 4) setActiveFilter('social');
-    else if (section === 5) setActiveFilter('saved');
   }, []);
 
   const handleSettings = useCallback(() => {
     setShowSettings(prev => !prev);
   }, []);
-
-  const handleSave = useCallback(() => {
-    const article = filteredItems[selectedIndex];
-    if (article) {
-      if (isInReadingList(article.id)) {
-        removeFromReadingList(article.id);
-      } else {
-        addToReadingList(article.id);
-      }
-    }
-  }, [filteredItems, selectedIndex, isInReadingList, addToReadingList, removeFromReadingList]);
 
   const handleSelectFromSearch = useCallback((result: { id: string; link?: string }) => {
     const article = items.find(item => item.id === result.id);
@@ -150,7 +136,6 @@ function App() {
     onHelp: handleHelp,
     onSection: handleSection,
     onSettings: handleSettings,
-    onSave: handleSave,
   });
 
   return (
@@ -159,7 +144,6 @@ function App() {
       <Header
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
-        savedCount={settings.readingList.length}
         onSearchOpen={() => setShowSearch(true)}
         onHelpOpen={() => setShowKeyboardHelp(true)}
         onSettingsOpen={() => setShowSettings(true)}
@@ -171,7 +155,7 @@ function App() {
         {/* Mobile: Single view controlled by bottom tabs */}
 
         {/* Feed — always visible on desktop, shown on mobile when activeView='feed' */}
-        <div className={`flex-1 overflow-hidden ${activeView !== 'feed' ? 'hidden md:block' : ''}`}>
+        <div className={`flex-1 min-w-0 overflow-hidden ${activeView !== 'feed' ? 'hidden md:block' : ''}`}>
           <UnifiedFeed
             items={items}
             briefingItems={briefingItems}
@@ -181,18 +165,26 @@ function App() {
             selectedIndex={selectedIndex}
             onSelectIndex={setSelectedIndex}
             readArticles={settings.readArticles}
-            savedArticles={settings.readingList}
             newItemIds={newItemIds}
             onRefresh={refresh}
             onPreview={handlePreview}
           />
         </div>
 
+        <PaneResizeHandle
+          orientation="vertical"
+          label="Resize feed and dashboard sidebar"
+          onResize={delta => resizePane('sidebarWidth', -delta)}
+          className="hidden md:flex"
+        />
+
         {/* Desktop sidebar */}
         <Sidebar
           zip={settings.location.zip}
           collapsedSections={settings.collapsedSections}
           onToggleSection={toggleSection}
+          paneSizes={settings.paneSizes}
+          onResizePane={resizePane}
         />
 
         {/* Mobile: Markets view */}

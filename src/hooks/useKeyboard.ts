@@ -9,7 +9,6 @@ export interface KeyboardHandlers {
   onHelp?: () => void;
   onSection?: (section: number) => void;
   onSettings?: () => void;
-  onSave?: () => void;
 }
 
 export function useKeyboard(handlers: KeyboardHandlers, enabled = true) {
@@ -70,18 +69,10 @@ export function useKeyboard(handlers: KeyboardHandlers, enabled = true) {
         }
         break;
 
-      case 's':
-        if (ctrlKey || metaKey) {
-          e.preventDefault();
-          handlersRef.current.onSave?.();
-        }
-        break;
-
       case '1':
       case '2':
       case '3':
       case '4':
-      case '5':
         e.preventDefault();
         handlersRef.current.onSection?.(parseInt(key));
         break;
@@ -103,7 +94,6 @@ export const KEYBOARD_SHORTCUTS = [
   { keys: ['/'], action: 'Search' },
   { keys: ['Esc'], action: 'Close panel/modal' },
   { keys: ['?'], action: 'Show keyboard shortcuts' },
-  { keys: ['1-5'], action: 'Jump to section' },
+  { keys: ['1-4'], action: 'Jump to section' },
   { keys: ['Ctrl+,'], action: 'Open settings' },
-  { keys: ['Ctrl+S'], action: 'Save to reading list' },
 ];

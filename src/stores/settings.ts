@@ -27,15 +27,22 @@ export interface Settings {
   // Layout
   layout: 'compact' | 'dashboard';
   collapsedSections: string[];
+  paneSizes: PaneSizes;
 
   // Display
   refreshInterval: number;
   maxHeadlines: number;
   showSourceIcons: boolean;
 
-  // Reading
-  readingList: string[];
   readArticles: string[];
+}
+
+export interface PaneSizes {
+  sidebarWidth: number;
+  weatherHeight: number;
+  globeHeight: number;
+  predictionsHeight: number;
+  marketsHeight: number;
 }
 
 const DEFAULT_SOURCES: SourceConfig[] = [
@@ -92,10 +99,16 @@ const DEFAULT_SETTINGS: Settings = {
   customFeeds: [],
   layout: 'compact',
   collapsedSections: [],
+  paneSizes: {
+    sidebarWidth: 380,
+    weatherHeight: 180,
+    globeHeight: 200,
+    predictionsHeight: 160,
+    marketsHeight: 180,
+  },
   refreshInterval: 60000,
   maxHeadlines: 50,
   showSourceIcons: true,
-  readingList: [],
   readArticles: [],
 };
 
@@ -106,11 +119,13 @@ export function loadSettings(): Settings {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
+      delete parsed.readingList;
       // Merge with defaults to handle new fields
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
         location: { ...DEFAULT_SETTINGS.location, ...parsed.location },
+        paneSizes: { ...DEFAULT_SETTINGS.paneSizes, ...parsed.paneSizes },
         sources: mergeSourceConfigs(DEFAULT_SOURCES, parsed.sources || []),
       };
     }
@@ -152,26 +167,26 @@ export function getEnabledSourcesByCategory(settings: Settings, category: Source
     .sort((a, b) => a.priority - b.priority);
 }
 
-export function addToReadingList(settings: Settings, articleId: string): Settings {
-  if (settings.readingList.includes(articleId)) return settings;
-  return {
-    ...settings,
-    readingList: [...settings.readingList, articleId],
-  };
-}
-
-export function removeFromReadingList(settings: Settings, articleId: string): Settings {
-  return {
-    ...settings,
-    readingList: settings.readingList.filter(id => id !== articleId),
-  };
-}
-
 export function markAsRead(settings: Settings, articleId: string): Settings {
   if (settings.readArticles.includes(articleId)) return settings;
   return {
     ...settings,
     readArticles: [...settings.readArticles, articleId],
+  };
+}
+
+export function updatePaneSize(
+  settings: Settings,
+  pane: keyof PaneSizes,
+  value: number
+): Settings {
+  const [minimum, maximum] = pane === 'sidebarWidth' ? [240, 560] : [100, 520];
+  return {
+    ...settings,
+    paneSizes: {
+      ...settings.paneSizes,
+      [pane]: Math.round(Math.min(maximum, Math.max(minimum, value))),
+    },
   };
 }
 

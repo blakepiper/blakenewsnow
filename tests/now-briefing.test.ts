@@ -61,6 +61,23 @@ test('uses only real headlines and links in the extractive briefing', () => {
   });
 });
 
+test('fills all six briefing cells when a filter page has enough reports', () => {
+  const items = [
+    item('one', 'Central bank announces revised lending guidance', 'Source A', 1),
+    item('two', 'Parliament opens debate on national housing bill', 'Source B', 2),
+    item('three', 'Researchers publish new battery efficiency results', 'Source C', 3),
+    item('four', 'Shipping companies reroute vessels after port closure', 'Source D', 4),
+    item('five', 'Health agency expands seasonal vaccine program', 'Source E', 5),
+    item('six', 'Regional rail operator unveils overnight service', 'Source F', 6),
+    item('seven', 'Court schedules hearing in antitrust challenge', 'Source G', 7),
+  ];
+
+  const briefing = buildNowBriefing(items, { now: NOW });
+
+  assert.equal(briefing.clusters.length, 6);
+  assert.equal(new Set(briefing.clusters.map(cluster => cluster.link)).size, 6);
+});
+
 test('excludes stale, future, invalid, and duplicate reports', () => {
   const valid = item('valid', 'Transit workers approve tentative contract', 'Source A', 1);
   const duplicate = { ...valid, id: 'duplicate', source: 'Source B' };

@@ -112,6 +112,8 @@ const cache = {
   weather: { data: null, timestamp: 0 },
   radar: { data: null, timestamp: 0 },
   predictions: { data: null, timestamp: 0 },
+  polymarket: { data: null, timestamp: 0 },
+  pizzint: { data: null, timestamp: 0 },
   lemmy: { data: null, timestamp: 0 },
   hackernews: { data: null, timestamp: 0 },
   fourchan: { data: null, timestamp: 0 },
@@ -127,6 +129,8 @@ const CACHE_TTL = {
   weather: 5 * 60 * 1000, // 5 minutes
   radar: 2 * 60 * 1000,   // 2 minutes
   predictions: 60 * 1000, // 1 minute
+  polymarket: 5 * 60 * 1000,
+  pizzint: 5 * 60 * 1000,
   lemmy: 2 * 60 * 1000,
   hackernews: 2 * 60 * 1000, // 2 minutes
   fourchan: 2 * 60 * 1000,   // 2 minutes
@@ -815,10 +819,95 @@ async function fetchWeather(zip = DEFAULT_ZIP) {
 // ============================================
 // Polymarket Predictions
 // ============================================
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function isSportsMarket(question) {
+  const q = question.toLowerCase();
+  return q.includes('nba') || q.includes('nfl') || q.includes('mlb') ||
+    q.includes('nhl') || q.includes('ncaa') || q.includes('ufc') ||
+    q.includes('tennis') || q.includes('golf') || q.includes('soccer') ||
+    q.includes('football') || q.includes('basketball') || q.includes('baseball') ||
+    q.includes('hockey') || q.includes('f1') || q.includes('formula') ||
+    q.includes('nascar') || q.includes('pga') || q.includes('boxing') ||
+    q.includes('mma') || q.includes('wrestling') || q.includes('olympics') ||
+    q.includes(' vs ') || q.includes(' vs. ') ||
+    q.includes('warriors') || q.includes('lakers') || q.includes('celtics') ||
+    q.includes('cavaliers') || q.includes('magic') || q.includes('timberwolves') ||
+    q.includes('knicks') || q.includes('bulls') || q.includes('heat') ||
+    q.includes('mavs') || q.includes('mavericks') || q.includes('spurs') ||
+    q.includes('nuggets') || q.includes('suns') || q.includes('clippers') ||
+    q.includes('chiefs') || q.includes('eagles') || q.includes('patriots') ||
+    q.includes('cowboys') || q.includes('packers') || q.includes('ravens') ||
+    q.includes('super bowl') || q.includes('world series') ||
+    q.includes('stanley cup') || q.includes('march madness') ||
+    q.includes('playoffs') || q.includes('championship');
+}
+
+function normalizePolymarketMarket(market, now = Date.now()) {
+  const question = typeof market?.question === 'string' ? market.question.trim() : '';
+  const volume24h = Number(market?.volume24hr);
+  if (
+    !market?.id ||
+    !question ||
+    market.closed ||
+    market.archived ||
+    market.active === false ||
+    isSportsMarket(question) ||
+    !Number.isFinite(volume24h) ||
+    volume24h < 5000
+  ) {
+    return null;
+  }
+
+  const marketEnd = new Date(market.endDate).getTime();
+  if (Number.isFinite(marketEnd) && marketEnd <= now) return null;
+
+  const outcomes = parseJsonArray(market.outcomes);
+  const prices = parseJsonArray(market.outcomePrices);
+  const yesIndex = outcomes.findIndex(outcome => String(outcome).toLowerCase() === 'yes');
+  const yesPrice = Number(prices[yesIndex >= 0 ? yesIndex : 0]);
+  if (!Number.isFinite(yesPrice) || yesPrice < 0.02 || yesPrice > 0.98) return null;
+
+  const events = Array.isArray(market.events) ? market.events : [];
+  const currentEvent = events.find(event => {
+    const end = new Date(event.endDate).getTime();
+    return !event.closed && event.active !== false && (!Number.isFinite(end) || end > now);
+  }) || events.find(event => event?.slug);
+  const eventSlug = currentEvent?.slug || market.slug;
+  if (!eventSlug) return null;
+
+  const marketSlug = market.slug && market.slug !== eventSlug
+    ? `?marketSlug=${encodeURIComponent(market.slug)}`
+    : '';
+
+  return {
+    id: String(market.id),
+    question: truncateQuestion(question),
+    yesPrice: Math.round(yesPrice * 100),
+    volume24h,
+    volumeDisplay: formatVolume(volume24h),
+    slug: market.slug,
+    eventSlug,
+    url: `https://polymarket.com/event/${encodeURIComponent(eventSlug)}${marketSlug}`,
+    endDate: Number.isFinite(marketEnd) ? new Date(marketEnd).toISOString() : null,
+    category: categorizeMarket(question),
+    source: 'Polymarket',
+  };
+}
+
 async function fetchPolymarketDirect() {
   console.log('[DATA] Fetching predictions from Polymarket...');
 
-  const url = 'https://gamma-api.polymarket.com/markets?limit=50&active=true&closed=false&order=volume24hr&ascending=false';
+  const url = 'https://gamma-api.polymarket.com/markets?limit=100&active=true&closed=false&order=volume24hr&ascending=false';
 
   try {
     const { data } = await fetch(url, {
@@ -827,57 +916,18 @@ async function fetchPolymarketDirect() {
 
     const markets = JSON.parse(data);
 
-    return markets
-      .filter(m => {
-        // Skip sports betting, focus on news-worthy markets
-        const q = m.question?.toLowerCase() || '';
-        const isSports = q.includes('nba') || q.includes('nfl') || q.includes('mlb') ||
-                        q.includes('nhl') || q.includes('ncaa') || q.includes('ufc') ||
-                        q.includes('tennis') || q.includes('golf') || q.includes('soccer') ||
-                        q.includes('football') || q.includes('basketball') || q.includes('baseball') ||
-                        q.includes('hockey') || q.includes('f1') || q.includes('formula') ||
-                        q.includes('nascar') || q.includes('pga') || q.includes('boxing') ||
-                        q.includes('mma') || q.includes('wrestling') || q.includes('olympics') ||
-                        q.includes(' vs ') || q.includes(' vs. ') ||
-                        q.includes('warriors') || q.includes('lakers') || q.includes('celtics') ||
-                        q.includes('cavaliers') || q.includes('magic') || q.includes('timberwolves') ||
-                        q.includes('knicks') || q.includes('bulls') || q.includes('heat') ||
-                        q.includes('mavs') || q.includes('mavericks') || q.includes('spurs') ||
-                        q.includes('nuggets') || q.includes('suns') || q.includes('clippers') ||
-                        q.includes('chiefs') || q.includes('eagles') || q.includes('patriots') ||
-                        q.includes('cowboys') || q.includes('packers') || q.includes('ravens') ||
-                        q.includes('super bowl') || q.includes('world series') || q.includes('stanley cup') ||
-                        q.includes('march madness') || q.includes('playoffs') || q.includes('championship');
-        if (isSports) return false;
-        if (m.volume24hr < 5000) return false; // Min $5k 24h volume
+    const result = markets
+      .map(market => normalizePolymarketMarket(market))
+      .filter(Boolean)
+      .slice(0, 25);
 
-        const prices = JSON.parse(m.outcomePrices || '[0.5, 0.5]');
-        const yesPrice = parseFloat(prices[0]);
-        if (yesPrice < 0.02 || yesPrice > 0.98) return false;
-
-        return true;
-      })
-      .slice(0, 25)
-      .map(m => {
-        const outcomes = JSON.parse(m.outcomes || '["Yes", "No"]');
-        const prices = JSON.parse(m.outcomePrices || '[0.5, 0.5]');
-
-        const yesIndex = outcomes.findIndex(o => o.toLowerCase() === 'yes');
-        const yesPrice = yesIndex >= 0 ? parseFloat(prices[yesIndex]) : parseFloat(prices[0]);
-
-        return {
-          id: m.id,
-          question: truncateQuestion(m.question),
-          yesPrice: Math.round(yesPrice * 100),
-          volume24h: m.volume24hr,
-          volumeDisplay: formatVolume(m.volume24hr),
-          slug: m.slug,
-          category: categorizeMarket(m.question),
-        };
-      });
+    if (result.length > 0) {
+      cache.polymarket = { data: result, timestamp: Date.now() };
+    }
+    return result.length > 0 ? result : cache.polymarket.data || [];
   } catch (err) {
     console.error('[POLYMARKET]', err.message);
-    return [];
+    return cache.polymarket.data || [];
   }
 }
 
@@ -937,7 +987,7 @@ async function fetchPizzintWatch() {
     }
     const now = Date.now();
 
-    return markets
+    const result = markets
       .filter(m => {
         if (m.endDate && new Date(m.endDate).getTime() < now) return false;
         return m.label || m.question || m.title;
@@ -950,19 +1000,33 @@ async function fetchPizzintWatch() {
             ? Math.round(m.probability * 100)
             : 50;
 
+        const volume24h = Number(m.volume_24h ?? m.volume24hr ?? m.volume) || 0;
+        const eventSlug = m.eventSlug || null;
+
         return {
           id: `pizzint-${m.id || m.slug || crypto.createHash('md5').update(question).digest('hex').slice(0, 10)}`,
           question: truncateQuestion(question),
           yesPrice,
-          volume24h: m.volume24hr || m.volume || 0,
-          volumeDisplay: formatVolume(m.volume24hr || m.volume || 0),
+          volume24h,
+          volumeDisplay: formatVolume(volume24h),
           slug: m.slug || null,
+          eventSlug,
+          url: eventSlug
+            ? `https://polymarket.com/event/${encodeURIComponent(eventSlug)}`
+            : 'https://pizzint.watch',
+          endDate: m.endDate ? new Date(m.endDate).toISOString() : null,
           category: 'geopolitical',
+          source: 'pizzint.watch',
         };
       });
+
+    if (result.length > 0) {
+      cache.pizzint = { data: result, timestamp: Date.now() };
+    }
+    return result.length > 0 ? result : cache.pizzint.data || [];
   } catch (err) {
     console.error('[PIZZINT]', err.message);
-    return [];
+    return cache.pizzint.data || [];
   }
 }
 
@@ -1000,11 +1064,7 @@ async function fetchPredictions() {
 
 function truncateQuestion(q) {
   if (!q) return '';
-  // Remove common prefixes
-  let clean = q
-    .replace(/^Will /i, '')
-    .replace(/^Is /i, '')
-    .replace(/\?$/, '');
+  let clean = q.trim();
 
   // Truncate if too long
   if (clean.length > 60) {
@@ -1445,6 +1505,7 @@ function registerRoutes(app) {
 
 module.exports = {
   RSS_FEEDS,
+  normalizePolymarketMarket,
   selectDiverseItems,
   registerRoutes,
   fetchHeadlines,

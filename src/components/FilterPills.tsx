@@ -2,12 +2,11 @@ import { Tab, Tabs } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import type { ChangeEvent } from 'react';
 
-export type FilterType = 'all' | 'news' | 'tech' | 'social' | 'saved';
+export type FilterType = 'all' | 'news' | 'tech' | 'social';
 
 interface FilterPillsProps {
   activeFilter: FilterType;
   onFilterChange: (filter: FilterType) => void;
-  savedCount?: number;
 }
 
 const filters: { id: FilterType; label: string }[] = [
@@ -15,7 +14,6 @@ const filters: { id: FilterType; label: string }[] = [
   { id: 'news', label: 'News' },
   { id: 'tech', label: 'Tech' },
   { id: 'social', label: 'Social' },
-  { id: 'saved', label: 'Saved' },
 ];
 
 const useStyles = makeStyles(theme => ({
@@ -52,14 +50,9 @@ const useStyles = makeStyles(theme => ({
     },
   },
   selected: {},
-  count: {
-    marginLeft: 5,
-    color: theme.palette.secondary.main,
-    fontVariantNumeric: 'tabular-nums',
-  },
 }));
 
-export function FilterPills({ activeFilter, onFilterChange, savedCount = 0 }: FilterPillsProps) {
+export function FilterPills({ activeFilter, onFilterChange }: FilterPillsProps) {
   const classes = useStyles();
 
   return (
@@ -76,14 +69,7 @@ export function FilterPills({ activeFilter, onFilterChange, savedCount = 0 }: Fi
           key={filter.id}
           value={filter.id}
           classes={{ root: classes.tab, selected: classes.selected }}
-          label={
-            <span>
-              {filter.label}
-              {filter.id === 'saved' && savedCount > 0 && (
-                <span className={classes.count}>{savedCount}</span>
-              )}
-            </span>
-          }
+          label={filter.label}
         />
       ))}
     </Tabs>

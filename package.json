@@ -23,14 +23,12 @@
     "@material-ui/core": "4.12.4",
     "@material-ui/icons": "4.11.3",
     "@mozilla/readability": "^0.6.0",
-    "@react-three/fiber": "7.0.29",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "fast-xml-parser": "5.10.1",
     "jsdom": "^26.1.0",
     "react": "17.0.2",
-    "react-dom": "17.0.2",
-    "three": "0.137.5"
+    "react-dom": "17.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -38,7 +36,6 @@
     "@types/node": "^24.10.1",
     "@types/react": "17.0.89",
     "@types/react-dom": "17.0.26",
-    "@types/three": "0.137.0",
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.1",

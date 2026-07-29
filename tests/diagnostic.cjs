@@ -413,7 +413,7 @@ async function runTests() {
   log('\n[8/8] Predictions API', 'cyan');
   await testEndpoint('Predictions', '/api/predictions', [
     validateArray(3),
-    validateFields(['id', 'question', 'yesPrice', 'category']),
+    validateFields(['id', 'question', 'yesPrice', 'category', 'source', 'url']),
     (data, name) => {
       if (!Array.isArray(data)) return;
       const invalidOdds = data.filter(d => d.yesPrice < 0 || d.yesPrice > 100).length;
@@ -421,6 +421,15 @@ async function runTests() {
         fail(`${name} odds range`, `${invalidOdds} items have odds outside 0-100%`);
       } else {
         pass(`${name} all odds are in valid range`);
+      }
+    },
+    (data, name) => {
+      if (!Array.isArray(data)) return;
+      const ended = data.filter(d => d.endDate && new Date(d.endDate).getTime() <= Date.now());
+      if (ended.length > 0) {
+        fail(`${name} freshness`, `${ended.length} markets have already ended`);
+      } else {
+        pass(`${name} excludes ended markets`);
       }
     },
     (data, name) => {

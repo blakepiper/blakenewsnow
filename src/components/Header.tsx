@@ -9,7 +9,6 @@ import { FilterPills } from './FilterPills';
 interface HeaderProps {
   activeFilter: FilterType;
   onFilterChange: (filter: FilterType) => void;
-  savedCount: number;
   onSearchOpen: () => void;
   onHelpOpen: () => void;
   onSettingsOpen: () => void;
@@ -108,18 +107,13 @@ const useStyles = makeStyles(theme => ({
 export function Header({
   activeFilter,
   onFilterChange,
-  savedCount,
   onSearchOpen,
   onHelpOpen,
   onSettingsOpen,
 }: HeaderProps) {
   const classes = useStyles();
   const filters = (
-    <FilterPills
-      activeFilter={activeFilter}
-      onFilterChange={onFilterChange}
-      savedCount={savedCount}
-    />
+    <FilterPills activeFilter={activeFilter} onFilterChange={onFilterChange} />
   );
 
   return (
