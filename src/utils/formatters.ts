@@ -74,6 +74,11 @@ export function getSourceColor(source: string): string {
     'PLOS ONE': 'bg-orange-600',
     'The Lancet': 'bg-rose-600',
     'NEJM': 'bg-red-700',
+    'APS Psychology': 'bg-cyan-500',
+    'Neuroscience News Psychology': 'bg-violet-600',
+    'Frontiers in Psychology': 'bg-indigo-600',
+    'Human Factors': 'bg-teal-600',
+    'Ergonomics': 'bg-emerald-700',
   };
   if (source.startsWith('c/')) return 'bg-emerald-600';
   return colors[source] || 'bg-gray-500';
@@ -110,6 +115,11 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'science' |
     'PLOS ONE',
     'The Lancet',
     'NEJM',
+    'APS Psychology',
+    'Neuroscience News Psychology',
+    'Frontiers in Psychology',
+    'Human Factors',
+    'Ergonomics',
   ];
   if (techSources.includes(source)) return 'tech';
   if (scienceSources.includes(source)) return 'science';

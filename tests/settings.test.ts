@@ -50,6 +50,11 @@ test('includes science news outlets and journals as enabled science sources', ()
     'plos-one',
     'the-lancet',
     'nejm',
+    'aps-psychology',
+    'neuroscience-news-psychology',
+    'frontiers-psychology',
+    'human-factors',
+    'ergonomics',
   ]) {
     const source = sources.get(id);
     assert.equal(source?.enabled, true);

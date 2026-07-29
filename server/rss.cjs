@@ -66,6 +66,7 @@ function inferDateFromUrl(link) {
 function extractDate(entry, link) {
   const candidates = [
     entry.pubDate,
+    entry.pubdate,
     entry.published,
     entry.updated,
     entry['dc:date'],

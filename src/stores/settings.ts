@@ -112,6 +112,12 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'plos-one', name: 'PLOS ONE', enabled: true, category: 'science', priority: 59 },
   { id: 'the-lancet', name: 'The Lancet', enabled: true, category: 'science', priority: 60 },
   { id: 'nejm', name: 'NEJM', enabled: true, category: 'science', priority: 61 },
+  // Psychology and human factors
+  { id: 'aps-psychology', name: 'APS Psychology', enabled: true, category: 'science', priority: 62 },
+  { id: 'neuroscience-news-psychology', name: 'Neuroscience News Psychology', enabled: true, category: 'science', priority: 63 },
+  { id: 'frontiers-psychology', name: 'Frontiers in Psychology', enabled: true, category: 'science', priority: 64 },
+  { id: 'human-factors', name: 'Human Factors', enabled: true, category: 'science', priority: 65 },
+  { id: 'ergonomics', name: 'Ergonomics', enabled: true, category: 'science', priority: 66 },
 ];
 
 const DEFAULT_SETTINGS: Settings = {

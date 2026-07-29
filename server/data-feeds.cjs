@@ -98,6 +98,11 @@ const RSS_FEEDS = {
     { name: 'Quanta Magazine', url: 'https://www.quantamagazine.org/feed/' },
     { name: 'NASA', url: 'https://www.nasa.gov/feed/' },
     { name: 'AAAS Science News', url: 'https://www.science.org/rss/news_current.xml' },
+    { name: 'APS Psychology', url: 'https://www.psychologicalscience.org/feed' },
+    {
+      name: 'Neuroscience News Psychology',
+      url: 'https://neurosciencenews.com/neuroscience-topics/psychology/feed/',
+    },
     // Primary journals and journal publishers
     {
       name: 'Nature',
@@ -120,6 +125,21 @@ const RSS_FEEDS = {
     },
     { name: 'The Lancet', url: 'https://www.thelancet.com/rssfeed/lancet_current.xml' },
     { name: 'NEJM', url: 'https://www.nejm.org/action/showFeed?type=etoc&feed=rss&jc=nejm' },
+    {
+      name: 'Frontiers in Psychology',
+      url: 'https://www.frontiersin.org/journals/psychology/rss',
+      filter: item => !/^(corrigendum|retraction|expression of concern):/i.test(item.title),
+    },
+    {
+      name: 'Human Factors',
+      url: 'https://journals.sagepub.com/action/showFeed?feed=rss&jc=hfs&type=etoc',
+      filter: item => !/^(correction|retraction):/i.test(item.title),
+    },
+    {
+      name: 'Ergonomics',
+      url: 'https://www.tandfonline.com/feed/rss/terg20',
+      filter: item => !/^(correction|retraction):/i.test(item.title),
+    },
   ],
   ticker: [
     { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml' },
@@ -1293,7 +1313,8 @@ function selectScienceItems(items, requestedSources = null) {
   const eligible = requestedSources === null
     ? items
     : items.filter(item => requestedSources.has(item.source));
-  return selectDiverseItems(eligible, 60, 3);
+  const perSourceCap = Math.max(1, Math.floor(60 / RSS_FEEDS.science.length));
+  return selectDiverseItems(eligible, 60, perSourceCap);
 }
 
 async function fetchScienceNews(requestedSources = null) {

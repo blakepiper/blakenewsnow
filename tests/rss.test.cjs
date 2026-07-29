@@ -37,6 +37,19 @@ test('parses Atom alternate links and updated dates', () => {
   assert.equal(items[0].pubDate.toISOString(), '2026-07-29T10:00:00.000Z');
 });
 
+test('parses lowercase pubdate elements used by Frontiers journals', () => {
+  const items = parseRSS(`
+    <rss><channel><item>
+      <title>Psychology research</title>
+      <link>https://example.com/psychology-research</link>
+      <pubdate>2026-07-29T09:00:00Z</pubdate>
+    </item></channel></rss>
+  `, 'Frontiers in Psychology');
+
+  assert.equal(items[0].pubDate.toISOString(), '2026-07-29T09:00:00.000Z');
+  assert.equal(items[0].dateSource, 'feed');
+});
+
 test('parses RDF/RSS 1.0 feeds used by international publishers', () => {
   const xml = `
     <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"

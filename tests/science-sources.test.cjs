@@ -10,6 +10,8 @@ const NEWS_OUTLETS = [
   'Quanta Magazine',
   'NASA',
   'AAAS Science News',
+  'APS Psychology',
+  'Neuroscience News Psychology',
 ];
 
 const JOURNALS = [
@@ -22,6 +24,9 @@ const JOURNALS = [
   'PLOS ONE',
   'The Lancet',
   'NEJM',
+  'Frontiers in Psychology',
+  'Human Factors',
+  'Ergonomics',
 ];
 
 test('configures a distinct mix of science reporting and primary journals', () => {
