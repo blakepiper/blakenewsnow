@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
   ButtonBase,
-  Chip,
   Collapse,
   IconButton,
   Tooltip,
@@ -50,17 +49,6 @@ const useStyles = makeStyles(theme => ({
   meta: {
     color: theme.palette.text.secondary,
     fontSize: 9,
-  },
-  modelChip: {
-    height: 18,
-    color: 'rgba(214, 230, 238, 0.7)',
-    borderColor: 'rgba(130, 170, 190, 0.32)',
-    fontSize: 8,
-    letterSpacing: '0.05em',
-    '& .MuiChip-label': {
-      paddingLeft: 6,
-      paddingRight: 6,
-    },
   },
   grow: {
     flex: 1,
@@ -161,9 +149,6 @@ export function NowBriefing({ items, onPreview }: NowBriefingProps) {
         <span className={classes.meta}>
           {briefing.analyzedCount} reports / {briefing.windowHours}h
         </span>
-        <Tooltip title="Runs locally: TF-IDF event clustering, recency, and source diversity. No generative AI.">
-          <Chip variant="outlined" size="small" label="LOCAL ML" className={classes.modelChip} />
-        </Tooltip>
         <span className={classes.grow} />
         <span className={classes.meta}>{formatTimeAgo(briefing.generatedAt)}</span>
         <Tooltip title={expanded ? 'Collapse briefing' : 'Expand briefing'}>
@@ -196,7 +181,12 @@ export function NowBriefing({ items, onPreview }: NowBriefingProps) {
                   <span className={classes.storyTopline}>
                     <span className={classes.rank}>0{index + 1}</span>
                     <span className={classes.coverage}>{cluster.coverage}</span>
-                    <span>{cluster.itemCount} report{cluster.itemCount === 1 ? '' : 's'}</span>
+                    <span>
+                      {cluster.independentReportCount} independent
+                    </span>
+                    {cluster.publisherCount > cluster.independentReportCount && (
+                      <span>{cluster.publisherCount} outlets</span>
+                    )}
                     <span>{formatTimeAgo(cluster.timestamp)}</span>
                   </span>
                   <span className={classes.headline}>

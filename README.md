@@ -6,10 +6,9 @@
 
 A dense, keyboard-friendly dashboard for current news, technology, social posts, markets, weather, and prediction data.
 
-The **What's Happening Now** briefing is generated entirely in the browser. It uses TF-IDF
-headline vectors, cosine-similarity event clustering, recency, and independent-source diversity
-to rank developing storylines. The briefing is extractive: every displayed claim is an actual
-linked headline, not generated prose. It does not call an LLM or external ML service.
+The **What's Happening Now** briefing groups current coverage into six distinct storylines.
+Syndicated copies count as one independent report, while the original publisher links remain
+available. Every displayed claim is an actual linked headline, and no external AI service is used.
 
 Clicking a story opens the built-in text-only reader. The server uses Mozilla Readability to
 extract the article body and sends plain text to the app; publisher scripts, cookie prompts,

@@ -28,6 +28,11 @@ interface Document {
   timestamp: number;
   tokens: string[];
   vector: SparseVector;
+  canonicalLink: string;
+  normalizedTitle: string;
+  titleTokenSet: Set<string>;
+  descriptionShingles: Set<string>;
+  syndicationOrigin: string | null;
 }
 
 interface WorkingCluster {
@@ -50,7 +55,9 @@ export interface BriefingCluster {
     source: string;
   }>;
   itemCount: number;
-  coverage: 'broad coverage' | 'multi-source' | 'developing' | 'single report';
+  independentReportCount: number;
+  publisherCount: number;
+  coverage: 'broad coverage' | 'multi-source' | 'developing' | 'syndicated' | 'single report';
   score: number;
 }
 
@@ -87,6 +94,143 @@ function tokenize(title: string): string[] {
   return (title.toLocaleLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) || [])
     .map(stem)
     .filter(token => token.length > 2 && !STOP_WORDS.has(token) && !/^\d+$/.test(token));
+}
+
+function normalizedText(value: string): string {
+  return (value.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) || []).join(' ');
+}
+
+function canonicalLink(value: string): string {
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    url.hostname = url.hostname.replace(/^www\./, '').toLocaleLowerCase();
+    [
+      'fbclid',
+      'gclid',
+      'mc_cid',
+      'mc_eid',
+      'ref',
+      'source',
+    ].forEach(parameter => url.searchParams.delete(parameter));
+    [...url.searchParams.keys()]
+      .filter(parameter => parameter.toLocaleLowerCase().startsWith('utm_'))
+      .forEach(parameter => url.searchParams.delete(parameter));
+    url.searchParams.sort();
+    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+    return url.toString();
+  } catch {
+    return value.trim();
+  }
+}
+
+function wordShingles(value: string, width = 3): Set<string> {
+  const words = tokenize(value);
+  if (words.length < width) return new Set(words.length > 0 ? [words.join(' ')] : []);
+  return new Set(
+    Array.from(
+      { length: words.length - width + 1 },
+      (_, index) => words.slice(index, index + width).join(' ')
+    )
+  );
+}
+
+function setContainment(left: Set<string>, right: Set<string>): number {
+  const smallerSize = Math.min(left.size, right.size);
+  if (smallerSize === 0) return 0;
+  const [smaller, larger] = left.size <= right.size ? [left, right] : [right, left];
+  let shared = 0;
+  smaller.forEach(value => {
+    if (larger.has(value)) shared += 1;
+  });
+  return shared / smallerSize;
+}
+
+function wireOrigin(item: FeedItem): string | null {
+  const text = `${item.title}\n${item.description || ''}`;
+  const patterns: Array<[string, RegExp[]]> = [
+    ['reuters', [
+      /^\s*(?:by\s+)?reuters(?:\s*[—–:-]|\s*\()/im,
+      /^\s*[A-Z][A-Z .'-]+\s+\(Reuters\)\s*[—–-]/m,
+      /\bcopyright\s+(?:\d{4}\s+)?reuters\b/i,
+    ]],
+    ['associated-press', [
+      /^\s*(?:by\s+)?(?:the\s+)?associated press(?:\s*[—–:-]|\s*\()/im,
+      /^\s*\(?AP\)?\s*[—–:-]\s+/m,
+      /\bcopyright\s+(?:\d{4}\s+)?(?:the\s+)?associated press\b/i,
+    ]],
+    ['afp', [
+      /^\s*(?:by\s+)?(?:afp|agence france-presse)(?:\s*[—–:-]|\s*\()/im,
+      /\bcopyright\s+(?:\d{4}\s+)?(?:afp|agence france-presse)\b/i,
+    ]],
+  ];
+
+  return patterns.find(([, candidates]) => candidates.some(pattern => pattern.test(text)))?.[0] || null;
+}
+
+function likelySyndicated(left: Document, right: Document): boolean {
+  if (left.canonicalLink === right.canonicalLink) return true;
+
+  if (
+    left.normalizedTitle.length > 0
+    && left.normalizedTitle === right.normalizedTitle
+  ) {
+    return true;
+  }
+
+  const titleContainment = setContainment(left.titleTokenSet, right.titleTokenSet);
+  const descriptionContainment = setContainment(
+    left.descriptionShingles,
+    right.descriptionShingles
+  );
+  const hasUsefulDescriptions = Math.min(
+    left.descriptionShingles.size,
+    right.descriptionShingles.size
+  ) >= 4;
+
+  if (
+    hasUsefulDescriptions
+    && descriptionContainment >= 0.82
+    && titleContainment >= 0.55
+  ) {
+    return true;
+  }
+
+  if (
+    hasUsefulDescriptions
+    && titleContainment >= 0.9
+    && descriptionContainment >= 0.55
+  ) {
+    return true;
+  }
+
+  return Boolean(
+    left.syndicationOrigin
+    && left.syndicationOrigin === right.syndicationOrigin
+    && titleContainment >= 0.68
+  );
+}
+
+function groupIndependentReports(documents: Document[]): Document[][] {
+  const groups: Document[][] = [];
+  documents.forEach(document => {
+    const matchingGroup = groups.find(group =>
+      group.some(candidate => likelySyndicated(document, candidate))
+    );
+    if (matchingGroup) {
+      matchingGroup.push(document);
+    } else {
+      groups.push([document]);
+    }
+  });
+  return groups;
+}
+
+function independentReportCount(cluster: WorkingCluster, groups = groupIndependentReports(cluster.documents)): number {
+  const publisherCount = new Set(
+    cluster.documents.map(document => document.item.source)
+  ).size;
+  return Math.min(groups.length, publisherCount);
 }
 
 function termFeatures(tokens: string[]): string[] {
@@ -163,7 +307,7 @@ function representativeFor(cluster: WorkingCluster, now: number): Document {
   })[0];
 }
 
-function clusterScore(cluster: WorkingCluster, now: number): number {
+function clusterScore(cluster: WorkingCluster, now: number, independentReports: number): number {
   const sources = new Set(cluster.documents.map(document => document.item.source));
   const sourceTypes = new Set(cluster.documents.map(document => document.item.sourceType));
   const newest = Math.max(...cluster.documents.map(document => document.timestamp));
@@ -175,8 +319,8 @@ function clusterScore(cluster: WorkingCluster, now: number): number {
   ) / Math.max(1, cluster.documents.length);
 
   return (
-    Math.min(sources.size, 6) * 3
-    + Math.log2(Math.min(cluster.documents.length, sources.size + 1) + 1) * 1.5
+    Math.min(independentReports, 6) * 3
+    + Math.log2(Math.min(independentReports, sources.size + 1) + 1) * 1.5
     + recency * 2
     + Math.max(0, sourceTypes.size - 1) * 0.5
     + Math.min(engagement / 8, 0.75)
@@ -201,16 +345,22 @@ function topKeywords(cluster: WorkingCluster): string[] {
   });
 }
 
-function coverageLabel(sourceCount: number, itemCount: number): BriefingCluster['coverage'] {
-  if (sourceCount >= 4) return 'broad coverage';
-  if (sourceCount >= 2) return 'multi-source';
+function coverageLabel(
+  independentReports: number,
+  itemCount: number,
+  hasSyndication: boolean
+): BriefingCluster['coverage'] {
+  if (independentReports >= 4) return 'broad coverage';
+  if (independentReports >= 2) return 'multi-source';
+  if (hasSyndication) return 'syndicated';
   if (itemCount >= 2) return 'developing';
   return 'single report';
 }
 
 function uniqueRecentItems(items: FeedItem[], now: number, windowHours: number, maxItems: number): FeedItem[] {
   const oldestAllowed = now - windowHours * 60 * 60 * 1000;
-  const seen = new Set<string>();
+  const seenSourceTitles = new Set<string>();
+  const seenSourceLinks = new Set<string>();
 
   return [...items]
     .filter(item => {
@@ -223,9 +373,12 @@ function uniqueRecentItems(items: FeedItem[], now: number, windowHours: number, 
     })
     .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
     .filter(item => {
-      const key = item.title.toLocaleLowerCase().replace(/\W+/g, ' ').trim();
-      if (seen.has(key)) return false;
-      seen.add(key);
+      const source = item.source.toLocaleLowerCase();
+      const titleKey = `${source}\u0000${normalizedText(item.title)}`;
+      const linkKey = `${source}\u0000${canonicalLink(item.link)}`;
+      if (seenSourceTitles.has(titleKey) || seenSourceLinks.has(linkKey)) return false;
+      seenSourceTitles.add(titleKey);
+      seenSourceLinks.add(linkKey);
       return true;
     })
     .slice(0, maxItems);
@@ -268,19 +421,34 @@ export function buildNowBriefing(items: FeedItem[], options: BriefingOptions = {
         tokens,
         timestamp: new Date(item.timestamp).getTime(),
         vector: normalizeVector(vector),
+        canonicalLink: canonicalLink(item.link),
+        normalizedTitle: normalizedText(item.title),
+        titleTokenSet: new Set(tokens),
+        descriptionShingles: wordShingles(item.description || ''),
+        syndicationOrigin: wireOrigin(item),
       };
     });
 
   const ranked: BriefingCluster[] = clusterDocuments(documents)
-    .map(cluster => ({ cluster, score: clusterScore(cluster, now) }))
+    .map(cluster => {
+      const reportGroups = groupIndependentReports(cluster.documents);
+      const independentReports = independentReportCount(cluster, reportGroups);
+      return {
+        cluster,
+        reportGroups,
+        independentReports,
+        score: clusterScore(cluster, now, independentReports),
+      };
+    })
     .sort((left, right) => right.score - left.score)
     .slice(0, maxClusters)
-    .map(({ cluster, score }) => {
+    .map(({ cluster, reportGroups, independentReports, score }) => {
       const representative = representativeFor(cluster, now);
       const sources = [...new Set(cluster.documents.map(document => document.item.source))];
       const sourceTypes = [...new Set(cluster.documents.map(document => document.item.sourceType))];
-      const supporting = cluster.documents
-        .filter(document => document.item.id !== representative.item.id)
+      const supporting = reportGroups
+        .filter(group => !group.some(document => document.item.id === representative.item.id))
+        .map(group => [...group].sort((left, right) => right.timestamp - left.timestamp)[0])
         .sort((left, right) => right.timestamp - left.timestamp)
         .filter((document, index, all) =>
           all.findIndex(candidate => candidate.item.source === document.item.source) === index
@@ -303,7 +471,13 @@ export function buildNowBriefing(items: FeedItem[], options: BriefingOptions = {
         keywords: topKeywords(cluster),
         supporting,
         itemCount: cluster.documents.length,
-        coverage: coverageLabel(sources.length, cluster.documents.length),
+        independentReportCount: independentReports,
+        publisherCount: sources.length,
+        coverage: coverageLabel(
+          independentReports,
+          cluster.documents.length,
+          reportGroups.length < cluster.documents.length
+        ),
         score: Number(score.toFixed(3)),
       };
     });
@@ -313,11 +487,14 @@ export function buildNowBriefing(items: FeedItem[], options: BriefingOptions = {
   // reports so every filter page uses the complete six-cell layout without
   // inventing text or links.
   const selectedLinks = new Set(ranked.map(cluster => cluster.link));
+  const selectedDocuments = documents.filter(document => selectedLinks.has(document.item.link));
   const fallbackDocuments = [...documents].sort((left, right) => right.timestamp - left.timestamp);
   for (const document of fallbackDocuments) {
     if (ranked.length >= maxClusters) break;
     if (selectedLinks.has(document.item.link)) continue;
+    if (selectedDocuments.some(selected => likelySyndicated(document, selected))) continue;
     selectedLinks.add(document.item.link);
+    selectedDocuments.push(document);
     ranked.push({
       id: `briefing-fallback-${document.item.id}`,
       headline: document.item.title,
@@ -328,6 +505,8 @@ export function buildNowBriefing(items: FeedItem[], options: BriefingOptions = {
       keywords: document.tokens.slice(0, 3),
       supporting: [],
       itemCount: 1,
+      independentReportCount: 1,
+      publisherCount: 1,
       coverage: 'single report',
       score: 0,
     });

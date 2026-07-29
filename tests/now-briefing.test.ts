@@ -78,7 +78,80 @@ test('fills all six briefing cells when a filter page has enough reports', () =>
   assert.equal(new Set(briefing.clusters.map(cluster => cluster.link)).size, 6);
 });
 
-test('excludes stale, future, invalid, and duplicate reports', () => {
+test('counts syndicated copies as one independent report', () => {
+  const reutersLead = 'WASHINGTON (Reuters) - The president signed the national housing reform bill into law after a congressional vote.';
+  const items = [
+    {
+      ...item('wire-one', 'President signs national housing reform bill into law', 'Outlet A', 1),
+      description: reutersLead,
+    },
+    {
+      ...item('wire-two', 'National housing reform bill signed into law by president', 'Outlet B', 1.2),
+      description: `${reutersLead} The measure takes effect next year.`,
+    },
+    {
+      ...item('wire-three', 'President signs sweeping national housing reform into law', 'Outlet C', 1.4),
+      description: reutersLead,
+    },
+    {
+      ...item('original', 'President signs national housing reform law after congressional vote', 'Outlet D', 1.6),
+      description: 'The legislation changes zoning incentives and creates a grant program for local governments.',
+    },
+  ];
+
+  const briefing = buildNowBriefing(items, { now: NOW, maxClusters: 1 });
+  const cluster = briefing.clusters[0];
+
+  assert.equal(cluster.itemCount, 4);
+  assert.equal(cluster.publisherCount, 4);
+  assert.equal(cluster.independentReportCount, 2);
+  assert.equal(cluster.coverage, 'multi-source');
+});
+
+test('does not use syndicated copies to pad the six-cell briefing', () => {
+  const copiedLead = 'LONDON (Reuters) - Regulators approved the international shipping merger following a yearlong review.';
+  const items = [
+    {
+      ...item('copy-one', 'Regulators approve international shipping merger', 'Outlet A', 1),
+      description: copiedLead,
+    },
+    {
+      ...item('copy-two', 'International shipping merger wins approval from regulators', 'Outlet B', 1.1),
+      description: copiedLead,
+    },
+    item('distinct-one', 'Central bank announces revised lending guidance', 'Source C', 2),
+    item('distinct-two', 'Parliament opens debate on national housing bill', 'Source D', 3),
+    item('distinct-three', 'Researchers publish new battery efficiency results', 'Source E', 4),
+    item('distinct-four', 'Health agency expands seasonal vaccine program', 'Source F', 5),
+    item('distinct-five', 'Regional rail operator unveils overnight service', 'Source G', 6),
+  ];
+
+  const briefing = buildNowBriefing(items, { now: NOW });
+  const syndicatedCells = briefing.clusters.filter(cluster =>
+    /shipping merger/i.test(cluster.headline)
+  );
+
+  assert.equal(briefing.clusters.length, 6);
+  assert.equal(syndicatedCells.length, 1);
+});
+
+test('keeps the 180-item local briefing pass comfortably bounded', () => {
+  const items = Array.from({ length: 180 }, (_, index) => item(
+    `load-${index}`,
+    `Regional council approves emergency transit funding package ${index}`,
+    `Source ${index}`,
+    index / 20
+  ));
+  const started = performance.now();
+
+  const briefing = buildNowBriefing(items, { now: NOW });
+  const elapsed = performance.now() - started;
+
+  assert.equal(briefing.analyzedCount, 180);
+  assert.ok(elapsed < 150, `expected briefing build below 150ms, received ${elapsed.toFixed(1)}ms`);
+});
+
+test('excludes stale, future, and invalid reports while grouping cross-publisher duplicates', () => {
   const valid = item('valid', 'Transit workers approve tentative contract', 'Source A', 1);
   const duplicate = { ...valid, id: 'duplicate', source: 'Source B' };
   const stale = item('stale', 'A very old headline', 'Source C', 48);
@@ -90,9 +163,11 @@ test('excludes stale, future, invalid, and duplicate reports', () => {
     { now: NOW, windowHours: 36 }
   );
 
-  assert.equal(briefing.analyzedCount, 1);
+  assert.equal(briefing.analyzedCount, 2);
   assert.equal(briefing.clusters.length, 1);
   assert.equal(briefing.clusters[0].headline, valid.title);
+  assert.equal(briefing.clusters[0].publisherCount, 2);
+  assert.equal(briefing.clusters[0].independentReportCount, 1);
 });
 
 test('does not join unrelated stories on generic news phrases alone', () => {
