@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bnn-cache-v6';
+const CACHE_NAME = 'bnn-cache-v7';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -22,7 +22,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for API, cache-first for static
+// Fetch: network-first for navigation/API, stale-while-revalidate for assets.
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -32,6 +32,30 @@ self.addEventListener('fetch', (event) => {
 
   // API requests: network only (always want fresh data)
   if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  // Never let a cached HTML shell hide new metadata, bundles, or favicon links.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        try {
+          const response = await fetch(request);
+          if (response.ok) {
+            const cache = await caches.open(CACHE_NAME);
+            await cache.put('/', response.clone());
+          }
+          return response;
+        } catch {
+          const cached = await caches.match('/');
+          if (cached) return cached;
+          return new Response(
+            '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width"><title>BNN - Offline</title></head><body style="background:#0a0a0a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1>BNN</h1><p>You are offline. Please check your connection.</p></div></body></html>',
+            { headers: { 'Content-Type': 'text/html' } }
+          );
+        }
+      })()
+    );
     return;
   }
 
@@ -47,12 +71,6 @@ self.addEventListener('fetch', (event) => {
       }).catch(() => {
         // Offline fallback: return cached version or a basic offline page
         if (cached) return cached;
-        if (request.mode === 'navigate') {
-          return new Response(
-            '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width"><title>BNN - Offline</title></head><body style="background:#0a0a0a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1>BNN</h1><p>You are offline. Please check your connection.</p></div></body></html>',
-            { headers: { 'Content-Type': 'text/html' } }
-          );
-        }
         return cached;
       });
 
