@@ -6,6 +6,15 @@ test('saved-article state is no longer part of settings', () => {
   assert.equal('readingList' in DEFAULT_SETTINGS, false);
 });
 
+test('includes the requested financial publishers as enabled news sources', () => {
+  const sources = new Map(DEFAULT_SETTINGS.sources.map(source => [source.id, source]));
+
+  for (const id of ['bloomberg', 'financial-times', 'wall-street-journal']) {
+    assert.equal(sources.get(id)?.enabled, true);
+    assert.equal(sources.get(id)?.category, 'news');
+  }
+});
+
 test('pane dimensions persist within usable bounds', () => {
   const wide = updatePaneSize(DEFAULT_SETTINGS, 'sidebarWidth', 900);
   const short = updatePaneSize(DEFAULT_SETTINGS, 'weatherHeight', 20);

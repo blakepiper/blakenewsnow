@@ -150,7 +150,7 @@ server/
 
 | Category | Sources |
 |----------|---------|
-| News | NPR, BBC, CBC News, DW, Guardian, Al Jazeera, ABC, CBS, NY Times, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart |
+| News | NPR, BBC, CBC News, DW, Guardian, Al Jazeera, ABC, CBS, NY Times, Bloomberg, Financial Times, Wall Street Journal, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart |
 | Tech | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters, MIT Technology Review, BleepingComputer, Rest of World, The Register, 404 Media |
 | Social | Lemmy (c/news, c/world, c/technology), 4chan (/news/, /pol/, /lit/) |
 | Finance | Yahoo Finance, CoinGecko |

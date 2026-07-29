@@ -100,7 +100,8 @@ npm run audit:sources # direct health/freshness audit of every RSS/Atom URL
 News sources currently configured:
 
 - NPR, BBC, CBC News, DW, Guardian, Al Jazeera
-- ABC News, CBS News, NY Times, NBC News
+- ABC News, CBS News, NY Times, Bloomberg, Financial Times, Wall Street Journal
+- NBC News
 - PBS NewsHour, Axios, The Hill, Vox
 - Fox News, Politico, Semafor, The Intercept, ProPublica
 - Foreign Policy, Breitbart
