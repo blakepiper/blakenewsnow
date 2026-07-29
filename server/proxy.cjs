@@ -95,6 +95,7 @@ app.listen(PORT, () => {
   console.log('[SERVER] Available endpoints:');
   console.log('  - /api/headlines');
   console.log('  - /api/tech');
+  console.log('  - /api/science');
   console.log('  - /api/lemmy');
   console.log('  - /api/open-social');
   console.log('  - /api/hackernews');

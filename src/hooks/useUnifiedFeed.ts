@@ -87,12 +87,13 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
   const fetchAll = useCallback(async () => {
     const requestSequence = ++requestSequenceRef.current;
     try {
-      const headlineParams = new URLSearchParams({
+      const sourceParams = new URLSearchParams({
         sources: [...enabledSources].sort().join(','),
       });
-      const [headlinesRes, techRes, lemmyRes, openSocialRes, hnRes, chanRes] = await Promise.all([
-        fetch(`${API_BASE}/api/headlines?${headlineParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
+      const [headlinesRes, techRes, scienceRes, lemmyRes, openSocialRes, hnRes, chanRes] = await Promise.all([
+        fetch(`${API_BASE}/api/headlines?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/tech`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/science?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/lemmy`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/open-social`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/hackernews`).then(r => r.ok ? r.json() : []).catch(() => []),
@@ -122,6 +123,20 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
           title: h.title,
           source: h.source,
           sourceType: 'tech',
+          category: h.source,
+          timestamp: h.timestamp,
+          link: h.link || '',
+          description: h.description,
+        });
+      });
+
+      // Normalize science reporting and journal articles
+      (scienceRes as RawHeadline[]).forEach((h) => {
+        feedItems.push({
+          id: h.id,
+          title: h.title,
+          source: h.source,
+          sourceType: 'science',
           category: h.source,
           timestamp: h.timestamp,
           link: h.link || '',

@@ -64,3 +64,12 @@ server/
 
 Social sources must remain individually selectable in `src/stores/settings.ts`, normalized to
 the shared feed shape, and covered by deterministic tests.
+
+## Current science adapters
+
+- Science reporting: ScienceDaily, Phys.org, Science News, Live Science, Quanta Magazine, NASA, AAAS Science News
+- Journals: Nature, Science, PNAS, Cell, Science Advances, eLife, PLOS ONE, The Lancet, NEJM
+
+Science sources are served through `/api/science`, must remain individually selectable in
+`src/stores/settings.ts`, and use the same freshness, source-filtering, and failure-isolation
+invariants as the general news pool.

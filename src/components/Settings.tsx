@@ -254,6 +254,7 @@ export function Settings({
   const categoryLabels: Record<string, string> = {
     news: 'News',
     tech: 'Technology',
+    science: 'Science',
     social: 'Social',
     finance: 'Finance',
   };

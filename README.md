@@ -18,7 +18,7 @@
 
 ## Overview
 
-Blake News Now brings time-sensitive information into a single, keyboard-friendly interface. It aggregates current reporting and public social signals, removes stale and duplicate entries, and presents the result alongside weather, market, and prediction data.
+Blake News Now brings time-sensitive information into a single, keyboard-friendly interface. It aggregates current reporting, scientific publications, and public social signals, removes stale and duplicate entries, and presents the result alongside weather, market, and prediction data.
 
 The application is self-hosted and credential-free by default. Its **What's Happening Now** briefing runs entirely in the browser using local TF-IDF similarity, event clustering, and extractive ranking. It does not send stories to an LLM or another AI service.
 
@@ -30,6 +30,7 @@ The application is self-hosted and credential-free by default. Its **What's Happ
 - **Text-only article reader** — Mozilla Readability extracts article text without rendering publisher scripts, advertisements, cookie prompts, popups, or embeds.
 - **Verified full-text alternatives** — when a publisher exposes only an excerpt, local topic similarity finds related reporting and offers a link only after the reader verifies that the alternative has full text. The reader switches sources only when clicked and preserves both links.
 - **Source controls** — individual publishers and communities can be enabled or disabled from settings, with select-all and unselect-all actions.
+- **Dedicated science feed** — a separate Science tab combines current science journalism with articles from leading multidisciplinary and medical journals.
 - **Open social signals** — integrates Lemmy, Bluesky Discover, Mastodon trending links, Hacker News, and selected 4chan boards without application credentials.
 - **Live context panels** — weather radar, financial markets, cryptocurrency, prediction markets, ticker data, and an interactive geographic globe.
 - **Dense interaction model** — keyboard navigation, search, responsive layouts, and persistent draggable pane sizes.
@@ -105,6 +106,8 @@ The reader is deliberately separate from the publisher page. It only returns ext
 |---|---|
 | General news | NPR, BBC, CBC News, DW, The Guardian, Al Jazeera, ABC News, CBS News, The New York Times, Bloomberg, Financial Times, The Wall Street Journal, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart |
 | Technology | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters, MIT Technology Review, BleepingComputer, Rest of World, The Register, 404 Media |
+| Science news | ScienceDaily, Phys.org, Science News, Live Science, Quanta Magazine, NASA, AAAS Science News |
+| Scientific journals | Nature, Science, PNAS, Cell, Science Advances, eLife, PLOS ONE, The Lancet, NEJM |
 | Social | Lemmy communities, Bluesky Discover, Mastodon trending links, 4chan `/news/`, `/pol/`, and `/lit/` |
 | Markets | Yahoo Finance, CoinGecko |
 | Predictions | Polymarket, pizzint.watch |
@@ -122,7 +125,7 @@ Upstream availability and response formats can change without notice. Run `npm r
 | `/` | Open search |
 | `?` | Show keyboard shortcuts |
 | `Ctrl+,` | Open settings |
-| `1`–`4` | Change the active feed filter |
+| `1`–`5` | Change the active feed filter |
 | `Esc` | Close the active dialog |
 
 ## Architecture

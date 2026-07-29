@@ -7,7 +7,7 @@ interface SearchResult {
   source: string;
   timestamp: string;
   link?: string;
-  type?: 'news' | 'social' | 'tech';
+  type?: 'news' | 'social' | 'tech' | 'science';
 }
 
 interface SearchBarProps {

@@ -58,12 +58,28 @@ export function getSourceColor(source: string): string {
     '/lit/': 'bg-fuchsia-700',
     'Bluesky Discover': 'bg-sky-600',
     'Mastodon Trending': 'bg-violet-600',
+    'ScienceDaily': 'bg-emerald-500',
+    'Phys.org': 'bg-teal-500',
+    'Science News': 'bg-cyan-600',
+    'Live Science': 'bg-lime-600',
+    'Quanta Magazine': 'bg-violet-500',
+    'NASA': 'bg-blue-500',
+    'AAAS Science News': 'bg-sky-600',
+    'Nature': 'bg-red-600',
+    'Science': 'bg-red-500',
+    'PNAS': 'bg-indigo-500',
+    'Cell': 'bg-purple-600',
+    'Science Advances': 'bg-fuchsia-600',
+    'eLife': 'bg-yellow-600',
+    'PLOS ONE': 'bg-orange-600',
+    'The Lancet': 'bg-rose-600',
+    'NEJM': 'bg-red-700',
   };
   if (source.startsWith('c/')) return 'bg-emerald-600';
   return colors[source] || 'bg-gray-500';
 }
 
-export function getSourceCategory(source: string): 'news' | 'tech' | 'social' {
+export function getSourceCategory(source: string): 'news' | 'tech' | 'science' | 'social' {
   const techSources = [
     'Hacker News',
     'Ars Technica',
@@ -77,17 +93,37 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'social' {
     'The Register',
     '404 Media',
   ];
+  const scienceSources = [
+    'ScienceDaily',
+    'Phys.org',
+    'Science News',
+    'Live Science',
+    'Quanta Magazine',
+    'NASA',
+    'AAAS Science News',
+    'Nature',
+    'Science',
+    'PNAS',
+    'Cell',
+    'Science Advances',
+    'eLife',
+    'PLOS ONE',
+    'The Lancet',
+    'NEJM',
+  ];
   if (techSources.includes(source)) return 'tech';
+  if (scienceSources.includes(source)) return 'science';
   if (source.startsWith('c/')) return 'social';
   if (source.startsWith('/') && source.endsWith('/')) return 'social';
   if (['Bluesky Discover', 'Mastodon Trending'].includes(source)) return 'social';
   return 'news';
 }
 
-export function getCategoryDotColor(sourceType: 'news' | 'tech' | 'social'): string {
+export function getCategoryDotColor(sourceType: 'news' | 'tech' | 'science' | 'social'): string {
   switch (sourceType) {
     case 'news': return 'bg-blue-400';
     case 'tech': return 'bg-purple-400';
+    case 'science': return 'bg-emerald-400';
     case 'social': return 'bg-orange-400';
   }
 }

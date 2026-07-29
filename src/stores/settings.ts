@@ -6,7 +6,7 @@ export interface SourceConfig {
   id: string;
   name: string;
   enabled: boolean;
-  category: 'news' | 'tech' | 'social' | 'finance' | 'custom';
+  category: 'news' | 'tech' | 'science' | 'social' | 'finance' | 'custom';
   priority: number;
   apiSources?: string[];
   url?: string;
@@ -94,6 +94,24 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: '4chan-news', name: '4chan /news/', apiSources: ['/news/'], enabled: true, category: 'social', priority: 43 },
   { id: '4chan-pol', name: '4chan /pol/', apiSources: ['/pol/'], enabled: true, category: 'social', priority: 44 },
   { id: '4chan-lit', name: '4chan /lit/', apiSources: ['/lit/'], enabled: true, category: 'social', priority: 45 },
+  // Science news
+  { id: 'science-daily', name: 'ScienceDaily', enabled: true, category: 'science', priority: 46 },
+  { id: 'phys-org', name: 'Phys.org', enabled: true, category: 'science', priority: 47 },
+  { id: 'science-news', name: 'Science News', enabled: true, category: 'science', priority: 48 },
+  { id: 'live-science', name: 'Live Science', enabled: true, category: 'science', priority: 49 },
+  { id: 'quanta-magazine', name: 'Quanta Magazine', enabled: true, category: 'science', priority: 50 },
+  { id: 'nasa', name: 'NASA', enabled: true, category: 'science', priority: 51 },
+  { id: 'aaas-science-news', name: 'AAAS Science News', enabled: true, category: 'science', priority: 52 },
+  // Journals
+  { id: 'nature', name: 'Nature', enabled: true, category: 'science', priority: 53 },
+  { id: 'science-journal', name: 'Science', enabled: true, category: 'science', priority: 54 },
+  { id: 'pnas', name: 'PNAS', enabled: true, category: 'science', priority: 55 },
+  { id: 'cell', name: 'Cell', enabled: true, category: 'science', priority: 56 },
+  { id: 'science-advances', name: 'Science Advances', enabled: true, category: 'science', priority: 57 },
+  { id: 'elife', name: 'eLife', enabled: true, category: 'science', priority: 58 },
+  { id: 'plos-one', name: 'PLOS ONE', enabled: true, category: 'science', priority: 59 },
+  { id: 'the-lancet', name: 'The Lancet', enabled: true, category: 'science', priority: 60 },
+  { id: 'nejm', name: 'NEJM', enabled: true, category: 'science', priority: 61 },
 ];
 
 const DEFAULT_SETTINGS: Settings = {

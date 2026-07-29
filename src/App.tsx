@@ -124,6 +124,7 @@ function App() {
     else if (section === 2) setActiveFilter('news');
     else if (section === 3) setActiveFilter('tech');
     else if (section === 4) setActiveFilter('social');
+    else if (section === 5) setActiveFilter('science');
   }, []);
 
   const handleSettings = useCallback(() => {

@@ -89,6 +89,38 @@ const RSS_FEEDS = {
       filter: item => !/^podcast:/i.test(item.title),
     },
   ],
+  science: [
+    // Science news and explanatory reporting
+    { name: 'ScienceDaily', url: 'https://www.sciencedaily.com/rss/top/science.xml' },
+    { name: 'Phys.org', url: 'https://phys.org/rss-feed/' },
+    { name: 'Science News', url: 'https://www.sciencenews.org/feed' },
+    { name: 'Live Science', url: 'https://www.livescience.com/feeds/all' },
+    { name: 'Quanta Magazine', url: 'https://www.quantamagazine.org/feed/' },
+    { name: 'NASA', url: 'https://www.nasa.gov/feed/' },
+    { name: 'AAAS Science News', url: 'https://www.science.org/rss/news_current.xml' },
+    // Primary journals and journal publishers
+    {
+      name: 'Nature',
+      url: 'https://www.nature.com/nature.rss',
+      filter: item => !/^(author |publisher )?correction:|^retraction note:/i.test(item.title),
+    },
+    { name: 'Science', url: 'https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science' },
+    {
+      name: 'PNAS',
+      url: 'https://www.pnas.org/action/showFeed?type=etoc&feed=rss&jc=pnas',
+      filter: item => !/^in this issue$/i.test(item.title),
+    },
+    { name: 'Cell', url: 'https://www.cell.com/cell/current.rss' },
+    { name: 'Science Advances', url: 'https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=sciadv' },
+    { name: 'eLife', url: 'https://elifesciences.org/rss/recent.xml' },
+    {
+      name: 'PLOS ONE',
+      url: 'https://journals.plos.org/plosone/feed/atom',
+      filter: item => !/^(correction|retraction|expression of concern):/i.test(item.title),
+    },
+    { name: 'The Lancet', url: 'https://www.thelancet.com/rssfeed/lancet_current.xml' },
+    { name: 'NEJM', url: 'https://www.nejm.org/action/showFeed?type=etoc&feed=rss&jc=nejm' },
+  ],
   ticker: [
     { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml' },
     { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
@@ -110,6 +142,7 @@ const HN_API = 'https://hacker-news.firebaseio.com/v0';
 const cache = {
   headlines: { data: null, timestamp: 0 },
   tech: { data: null, timestamp: 0 },
+  science: { data: null, timestamp: 0 },
   ticker: { data: null, timestamp: 0 },
   markets: { data: null, timestamp: 0 },
   crypto: { data: null, timestamp: 0 },
@@ -128,6 +161,7 @@ const cache = {
 const CACHE_TTL = {
   headlines: 60 * 1000,  // 1 minute
   tech: 60 * 1000,       // 1 minute
+  science: 60 * 1000,    // 1 minute
   ticker: 60 * 1000,     // 1 minute
   markets: 30 * 1000,    // 30 seconds
   crypto: 60 * 1000,     // 1 minute
@@ -145,6 +179,7 @@ const CACHE_TTL = {
 const CONTENT_MAX_AGE = {
   headlines: 7 * 24 * 60 * 60 * 1000,
   tech: 7 * 24 * 60 * 60 * 1000,
+  science: 7 * 24 * 60 * 60 * 1000,
   ticker: 2 * 24 * 60 * 60 * 1000,
 };
 
@@ -1196,6 +1231,89 @@ async function fetchTechNews() {
 }
 
 // ============================================
+// Fetch Science News and Journals (RSS/Atom)
+// ============================================
+async function loadSciencePool() {
+  if (isCacheValid('science')) {
+    return cache.science.data;
+  }
+
+  console.log('[DATA] Fetching science news and journals...');
+
+  const feedResults = await Promise.all(
+    RSS_FEEDS.science.map(async feed => {
+      try {
+        const { data } = await fetch(feed.url, {
+          accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+          headers: feed.headers,
+        });
+        const parsedItems = parseRSS(data, feed.name);
+        let items = filterRecentItems(parsedItems, { maxAgeMs: CONTENT_MAX_AGE.science });
+        if (items.length < parsedItems.length) {
+          console.log(`[DATA] ${feed.name}: dropped ${parsedItems.length - items.length} stale, undated, or invalid items`);
+        }
+        if (feed.filter) {
+          const before = items.length;
+          items = items.filter(feed.filter);
+          if (items.length < before) {
+            console.log(`[DATA] ${feed.name}: filtered ${before - items.length} housekeeping items`);
+          }
+        }
+        console.log(`[DATA] ${feed.name}: ${items.length} science items`);
+        return items;
+      } catch (err) {
+        console.error(`[DATA] ${feed.name} failed:`, err.message);
+        return [];
+      }
+    })
+  );
+
+  const allItems = feedResults.flat().sort((a, b) => b.pubDate - a.pubDate);
+  const seen = new Set();
+  const unique = allItems.filter(item => {
+    const key = item.title.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const result = unique.map(item => ({
+    id: stableId('science', item.title, item.source),
+    title: item.title,
+    source: item.source,
+    timestamp: item.pubDate.toISOString(),
+    link: item.link,
+    description: item.description,
+  }));
+
+  cache.science = { data: result, timestamp: Date.now() };
+  return result;
+}
+
+function selectScienceItems(items, requestedSources = null) {
+  const eligible = requestedSources === null
+    ? items
+    : items.filter(item => requestedSources.has(item.source));
+  return selectDiverseItems(eligible, 60, 3);
+}
+
+async function fetchScienceNews(requestedSources = null) {
+  const pool = await dedupeRequest('science-pool', loadSciencePool);
+  return selectScienceItems(pool, requestedSources);
+}
+
+function parseRequestedScienceSources(value) {
+  if (value === undefined) return null;
+  const allowedSources = new Set(RSS_FEEDS.science.map(feed => feed.name));
+  const raw = Array.isArray(value) ? value.join(',') : String(value);
+  return new Set(
+    raw
+      .split(',')
+      .map(source => source.trim())
+      .filter(source => allowedSources.has(source))
+  );
+}
+
+// ============================================
 // Fetch Lemmy Posts
 // ============================================
 async function fetchLemmy() {
@@ -1696,7 +1814,18 @@ function registerRoutes(app) {
     }
   });
 
-  console.log('[DATA] API routes registered: /api/headlines, /api/ticker, /api/markets, /api/crypto, /api/weather, /api/radar, /api/predictions, /api/lemmy, /api/open-social, /api/hackernews, /api/4chan, /api/tech');
+  app.get('/api/science', async (req, res) => {
+    try {
+      const requestedSources = parseRequestedScienceSources(req.query.sources);
+      const data = await fetchScienceNews(requestedSources);
+      res.json(data);
+    } catch (err) {
+      console.error('[API] Science news error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  console.log('[DATA] API routes registered: /api/headlines, /api/ticker, /api/markets, /api/crypto, /api/weather, /api/radar, /api/predictions, /api/lemmy, /api/open-social, /api/hackernews, /api/4chan, /api/tech, /api/science');
 }
 
 module.exports = {
@@ -1704,6 +1833,7 @@ module.exports = {
   normalizePolymarketMarket,
   selectDiverseItems,
   selectHeadlineItems,
+  selectScienceItems,
   normalizeBlueskyPost,
   normalizeMastodonLink,
   registerRoutes,
@@ -1719,4 +1849,5 @@ module.exports = {
   fetchHackerNews,
   fetchFourChan,
   fetchTechNews,
+  fetchScienceNews,
 };

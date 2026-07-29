@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DEFAULT_SETTINGS, setAllSources, updatePaneSize } from '../src/stores/settings.ts';
+import { getSourceCategory } from '../src/utils/formatters.ts';
 
 test('saved-article state is no longer part of settings', () => {
   assert.equal('readingList' in DEFAULT_SETTINGS, false);
@@ -26,6 +27,34 @@ test('includes credential-free federated and open social sources', () => {
   ]) {
     assert.equal(sources.get(id)?.enabled, true);
     assert.equal(sources.get(id)?.category, 'social');
+  }
+});
+
+test('includes science news outlets and journals as enabled science sources', () => {
+  const sources = new Map(DEFAULT_SETTINGS.sources.map(source => [source.id, source]));
+
+  for (const id of [
+    'science-daily',
+    'phys-org',
+    'science-news',
+    'live-science',
+    'quanta-magazine',
+    'nasa',
+    'aaas-science-news',
+    'nature',
+    'science-journal',
+    'pnas',
+    'cell',
+    'science-advances',
+    'elife',
+    'plos-one',
+    'the-lancet',
+    'nejm',
+  ]) {
+    const source = sources.get(id);
+    assert.equal(source?.enabled, true);
+    assert.equal(source?.category, 'science');
+    assert.equal(getSourceCategory(source?.name || ''), 'science');
   }
 });
 

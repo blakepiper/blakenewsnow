@@ -9,6 +9,7 @@ export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 // Refresh Intervals (in milliseconds)
 export const REFRESH_INTERVALS = {
   headlines: 60 * 1000,      // 1 minute
+  science: 60 * 1000,        // 1 minute
   ticker: 60 * 1000,         // 1 minute
   markets: 30 * 1000,        // 30 seconds
   crypto: 60 * 1000,         // 1 minute

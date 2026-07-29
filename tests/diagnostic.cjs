@@ -295,7 +295,7 @@ async function runTests() {
   log('='.repeat(60), 'blue');
 
   // Test server health
-  log('\n[1/9] Server Health', 'cyan');
+  log('\n[1/10] Server Health', 'cyan');
   await testEndpoint('Health check', '/health', [
     (data) => {
       if (data.status !== 'ok') {
@@ -307,7 +307,7 @@ async function runTests() {
   ]);
 
   // Test Headlines
-  log('\n[2/9] Headlines API', 'cyan');
+  log('\n[2/10] Headlines API', 'cyan');
   await testEndpoint('Headlines', '/api/headlines', [
     validateArray(5),
     validateFields(['id', 'title', 'source', 'timestamp']),
@@ -346,7 +346,7 @@ async function runTests() {
   );
 
   // Test Lemmy
-  log('\n[3/9] Lemmy API', 'cyan');
+  log('\n[3/10] Lemmy API', 'cyan');
   await testEndpoint('Lemmy', '/api/lemmy', [
     validateArray(5),
     validateFields(['id', 'title', 'source', 'score', 'comments', 'timestamp']),
@@ -362,7 +362,7 @@ async function runTests() {
   ]);
 
   // Test open social signals
-  log('\n[4/9] Open Social API', 'cyan');
+  log('\n[4/10] Open Social API', 'cyan');
   await testEndpoint('Open Social', '/api/open-social', [
     validateArray(5),
     validateFields(['id', 'title', 'source', 'score', 'timestamp', 'url']),
@@ -380,7 +380,7 @@ async function runTests() {
   ]);
 
   // Test Hacker News
-  log('\n[5/9] Hacker News API', 'cyan');
+  log('\n[5/10] Hacker News API', 'cyan');
   await testEndpoint('Hacker News', '/api/hackernews', [
     validateArray(10),
     validateFields(['id', 'title', 'source', 'score', 'comments', 'timestamp']),
@@ -395,7 +395,7 @@ async function runTests() {
   ]);
 
   // Test Tech News
-  log('\n[6/9] Tech News API', 'cyan');
+  log('\n[6/10] Tech News API', 'cyan');
   await testEndpoint('Tech News', '/api/tech', [
     validateArray(5),
     validateFields(['id', 'title', 'source', 'timestamp']),
@@ -403,8 +403,47 @@ async function runTests() {
     validateSourceDiversity(),
   ]);
 
+  // Test science news and journal feeds
+  log('\n[7/10] Science API', 'cyan');
+  await testEndpoint('Science', '/api/science', [
+    validateArray(10),
+    validateFields(['id', 'title', 'source', 'timestamp', 'link']),
+    validateTimestamps(),
+    validateUrls(),
+    validateNoDuplicates('title'),
+    validateSourceDiversity(),
+  ]);
+
+  const selectedScienceSources = ['Nature', 'PNAS', 'eLife'];
+  await testEndpoint(
+    'Selected science journals',
+    `/api/science?sources=${encodeURIComponent(selectedScienceSources.join(','))}`,
+    [
+      validateArray(3),
+      validateFields(['id', 'title', 'source', 'timestamp', 'link']),
+      validateTimestamps(),
+      (data, name) => {
+        if (!Array.isArray(data)) return;
+        const unexpected = data.filter(item => !selectedScienceSources.includes(item.source));
+        const missing = selectedScienceSources.filter(
+          source => !data.some(item => item.source === source)
+        );
+        if (unexpected.length > 0) {
+          fail(`${name} selection`, `${unexpected.length} articles came from unselected journals`);
+        } else {
+          pass(`${name} excludes unselected journals`);
+        }
+        if (missing.length > 0) {
+          fail(`${name} coverage`, `No current articles from ${missing.join(', ')}`);
+        } else {
+          pass(`${name} includes all selected journals`);
+        }
+      },
+    ]
+  );
+
   // Test Markets
-  log('\n[7/9] Markets API', 'cyan');
+  log('\n[8/10] Markets API', 'cyan');
   await testEndpoint('Markets', '/api/markets', [
     (data, name) => {
       if (!data.indices || !Array.isArray(data.indices)) {
@@ -434,7 +473,7 @@ async function runTests() {
   ]);
 
   // Test Weather
-  log('\n[8/9] Weather API', 'cyan');
+  log('\n[9/10] Weather API', 'cyan');
   await testEndpoint('Weather', '/api/weather?zip=22314', [
     validateFields(['temperature', 'condition', 'location', 'lat', 'lon', 'forecast']),
     (data, name) => {
@@ -456,7 +495,7 @@ async function runTests() {
   ]);
 
   // Test Predictions
-  log('\n[9/9] Predictions API', 'cyan');
+  log('\n[10/10] Predictions API', 'cyan');
   await testEndpoint('Predictions', '/api/predictions', [
     validateArray(3),
     validateFields(['id', 'question', 'yesPrice', 'category', 'source', 'url']),
