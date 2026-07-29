@@ -23,10 +23,11 @@ interface SettingsProps {
   settings: SettingsType;
   onClose: () => void;
   onToggleSource: (sourceId: string) => void;
+  onSetAllSources: (enabled: boolean) => void;
   onUpdateLocation: (zip: string, city: string) => void;
 }
 
-type TabId = 'sources' | 'location' | 'display';
+type TabId = 'sources' | 'location';
 
 const useStyles = makeStyles(theme => ({
   paper: {
@@ -80,6 +81,20 @@ const useStyles = makeStyles(theme => ({
     '& + &': {
       marginTop: 24,
     },
+  },
+  sourceToolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 18,
+  },
+  sourceActions: {
+    display: 'flex',
+    gap: 6,
+  },
+  sourceAction: {
+    minWidth: 84,
   },
   categoryLabel: {
     display: 'block',
@@ -138,27 +153,6 @@ const useStyles = makeStyles(theme => ({
     gap: 4,
     paddingTop: 16,
   },
-  learningPanel: {
-    maxWidth: 620,
-    padding: 14,
-    border: `1px solid ${theme.palette.divider}`,
-    borderRadius: theme.shape.borderRadius,
-    background: 'rgba(111, 159, 197, 0.06)',
-  },
-  code: {
-    color: theme.palette.primary.light,
-    fontFamily: 'inherit',
-    fontSize: '0.92em',
-  },
-  learningList: {
-    display: 'grid',
-    gap: 8,
-    margin: '12px 0 0',
-    paddingLeft: 18,
-    color: theme.palette.text.secondary,
-    fontSize: 12,
-    lineHeight: 1.55,
-  },
   actions: {
     minHeight: 48,
     padding: '8px 12px',
@@ -204,6 +198,7 @@ export function Settings({
   settings,
   onClose,
   onToggleSource,
+  onSetAllSources,
   onUpdateLocation,
 }: SettingsProps) {
   const classes = useStyles();
@@ -212,6 +207,9 @@ export function Settings({
   const [locationSaved, setLocationSaved] = useState(false);
   const saveTimerRef = useRef<number | null>(null);
   const zipIsValid = /^\d{5}$/.test(zipInput);
+  const enabledSourceCount = settings.sources.filter(source => source.enabled).length;
+  const allSourcesEnabled = enabledSourceCount === settings.sources.length;
+  const allSourcesDisabled = enabledSourceCount === 0;
 
   useEffect(() => () => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -276,12 +274,36 @@ export function Settings({
       >
         <Tab className={classes.tab} value="sources" label="Sources" />
         <Tab className={classes.tab} value="location" label="Location" />
-        <Tab className={classes.tab} value="display" label="MUI notes" />
       </Tabs>
 
       <DialogContent className={classes.content}>
         {activeTab === 'sources' && (
           <div>
+            <div className={classes.sourceToolbar}>
+              <Typography variant="caption" color="textSecondary">
+                {enabledSourceCount} of {settings.sources.length} enabled
+              </Typography>
+              <div className={classes.sourceActions}>
+                <Button
+                  className={classes.sourceAction}
+                  size="small"
+                  variant="outlined"
+                  disabled={allSourcesEnabled}
+                  onClick={() => onSetAllSources(true)}
+                >
+                  Select all
+                </Button>
+                <Button
+                  className={classes.sourceAction}
+                  size="small"
+                  variant="outlined"
+                  disabled={allSourcesDisabled}
+                  onClick={() => onSetAllSources(false)}
+                >
+                  Unselect all
+                </Button>
+              </div>
+            </div>
             {Object.entries(sourcesByCategory).map(([category, sources]) => (
               <section key={category} className={classes.category}>
                 <Typography component="h3" variant="overline" className={classes.categoryLabel}>
@@ -335,21 +357,6 @@ export function Settings({
           </div>
         )}
 
-        {activeTab === 'display' && (
-          <section className={classes.learningPanel}>
-            <Typography component="h3" variant="subtitle2">What this screen teaches</Typography>
-            <Typography variant="body2" color="textSecondary">
-              This is Material-UI 4.12.4, whose package name is <code className={classes.code}>@material-ui/core</code>.
-              The app keeps BNN's dense visual language through a custom theme.
-            </Typography>
-            <ul className={classes.learningList}>
-              <li><code className={classes.code}>ThemeProvider</code> supplies palette, type, shape, defaults, and global overrides.</li>
-              <li><code className={classes.code}>makeStyles</code> creates scoped JSS classes with access to theme tokens.</li>
-              <li><code className={classes.code}>Tabs</code> and <code className={classes.code}>Tab</code> manage selection and keyboard semantics.</li>
-              <li><code className={classes.code}>Dialog</code>, <code className={classes.code}>Switch</code>, and <code className={classes.code}>TextField</code> supply accessible interaction behavior.</li>
-            </ul>
-          </section>
-        )}
       </DialogContent>
 
       <DialogActions className={classes.actions}>

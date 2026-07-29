@@ -3,6 +3,7 @@ import type { PaneSizes, Settings, SourceConfig } from '../stores/settings';
 import {
   loadSettings,
   saveSettings,
+  setAllSources,
   toggleSource,
   updateLocation,
   addCustomFeed,
@@ -25,6 +26,10 @@ export function useSettings() {
 
   const handleToggleSource = useCallback((sourceId: string) => {
     setSettings(prev => toggleSource(prev, sourceId));
+  }, []);
+
+  const handleSetAllSources = useCallback((enabled: boolean) => {
+    setSettings(prev => setAllSources(prev, enabled));
   }, []);
 
   const handleUpdateLocation = useCallback((zip: string, city: string) => {
@@ -75,6 +80,7 @@ export function useSettings() {
     settings,
     updateSettings,
     toggleSource: handleToggleSource,
+    setAllSources: handleSetAllSources,
     updateLocation: handleUpdateLocation,
     addCustomFeed: handleAddCustomFeed,
     removeCustomFeed: handleRemoveCustomFeed,

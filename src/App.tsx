@@ -24,6 +24,7 @@ function App() {
   const {
     settings,
     toggleSource,
+    setAllSources,
     updateLocation,
     markAsRead,
     toggleSection,
@@ -226,7 +227,7 @@ function App() {
                 </svg>
                 <div>
                   <div className="text-white/90 text-sm font-medium">Settings</div>
-                  <div className="text-white/50 text-xs">Sources, location, display</div>
+                  <div className="text-white/50 text-xs">Sources and location</div>
                 </div>
               </button>
               <button
@@ -273,6 +274,7 @@ function App() {
           settings={settings}
           onClose={() => setShowSettings(false)}
           onToggleSource={toggleSource}
+          onSetAllSources={setAllSources}
           onUpdateLocation={updateLocation}
         />
       )}

@@ -225,6 +225,14 @@ export function toggleSource(settings: Settings, sourceId: string): Settings {
   };
 }
 
+export function setAllSources(settings: Settings, enabled: boolean): Settings {
+  if (settings.sources.every(source => source.enabled === enabled)) return settings;
+  return {
+    ...settings,
+    sources: settings.sources.map(source => ({ ...source, enabled })),
+  };
+}
+
 export function updateLocation(settings: Settings, zip: string, city: string): Settings {
   return {
     ...settings,

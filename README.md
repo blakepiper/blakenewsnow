@@ -61,27 +61,6 @@ The What's Happening Now panel fills six cells on every feed filter when at leas
 current reports are available. Desktop pane dimensions are draggable and persist in
 local settings: drag the divider beside the dashboard or the handles below its panes.
 
-## Material-UI 4 learning map
-
-This project uses the v4 package names, not the v5+ `@mui/*` names.
-
-| Concept | Example |
-|---|---|
-| Theme creation and global defaults | `src/theme.ts` |
-| `ThemeProvider`, `StylesProvider`, `CssBaseline` | `src/main.tsx` |
-| `makeStyles`, theme tokens, `AppBar`, `Toolbar`, `Tooltip`, `IconButton` | `src/components/Header.tsx` |
-| Controlled `Tabs` and `Tab` | `src/components/FilterPills.tsx` |
-| `Dialog`, `Switch`, `TextField`, `Button`, component composition | `src/components/Settings.tsx` |
-
-The settings dialog also contains a short in-app MUI notes tab. The visual theme stays intentionally compact and BNN-specific instead of using Material-UI's default appearance.
-
-Useful official v4 references:
-
-- [Material-UI v4 documentation](https://v4.mui.com/)
-- [Component customization](https://v4.mui.com/customization/components/)
-- [Tabs](https://v4.mui.com/components/tabs/)
-- [Theming](https://v4.mui.com/customization/theming/)
-
 ## Commands
 
 ```bash
@@ -135,7 +114,7 @@ Other data comes from the National Weather Service, RainViewer, Yahoo Finance, C
 
 ```text
 src/
-  components/       Dashboard surfaces and MUI examples
+  components/       Dashboard surfaces
   hooks/            Feed orchestration, settings, keyboard behavior
   ml/               Local headline clustering and extractive briefing
   stores/           Local settings persistence
