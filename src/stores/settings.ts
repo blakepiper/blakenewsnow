@@ -87,9 +87,13 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'lemmy-news', name: 'Lemmy c/news', apiSources: ['c/news'], enabled: true, category: 'social', priority: 36 },
   { id: 'lemmy-world', name: 'Lemmy c/world', apiSources: ['c/world'], enabled: true, category: 'social', priority: 37 },
   { id: 'lemmy-technology', name: 'Lemmy c/technology', apiSources: ['c/technology'], enabled: true, category: 'social', priority: 38 },
-  { id: '4chan-news', name: '4chan /news/', apiSources: ['/news/'], enabled: true, category: 'social', priority: 39 },
-  { id: '4chan-pol', name: '4chan /pol/', apiSources: ['/pol/'], enabled: true, category: 'social', priority: 40 },
-  { id: '4chan-lit', name: '4chan /lit/', apiSources: ['/lit/'], enabled: true, category: 'social', priority: 41 },
+  { id: 'lemmy-politics', name: 'Lemmy c/politics', apiSources: ['c/politics'], enabled: true, category: 'social', priority: 39 },
+  { id: 'lemmy-science', name: 'Lemmy c/science', apiSources: ['c/science'], enabled: true, category: 'social', priority: 40 },
+  { id: 'bluesky-discover', name: 'Bluesky Discover', enabled: true, category: 'social', priority: 41 },
+  { id: 'mastodon-trending', name: 'Mastodon Trending', enabled: true, category: 'social', priority: 42 },
+  { id: '4chan-news', name: '4chan /news/', apiSources: ['/news/'], enabled: true, category: 'social', priority: 43 },
+  { id: '4chan-pol', name: '4chan /pol/', apiSources: ['/pol/'], enabled: true, category: 'social', priority: 44 },
+  { id: '4chan-lit', name: '4chan /lit/', apiSources: ['/lit/'], enabled: true, category: 'social', priority: 45 },
 ];
 
 const DEFAULT_SETTINGS: Settings = {

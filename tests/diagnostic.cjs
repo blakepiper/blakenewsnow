@@ -295,7 +295,7 @@ async function runTests() {
   log('='.repeat(60), 'blue');
 
   // Test server health
-  log('\n[1/8] Server Health', 'cyan');
+  log('\n[1/9] Server Health', 'cyan');
   await testEndpoint('Health check', '/health', [
     (data) => {
       if (data.status !== 'ok') {
@@ -307,7 +307,7 @@ async function runTests() {
   ]);
 
   // Test Headlines
-  log('\n[2/8] Headlines API', 'cyan');
+  log('\n[2/9] Headlines API', 'cyan');
   await testEndpoint('Headlines', '/api/headlines', [
     validateArray(5),
     validateFields(['id', 'title', 'source', 'timestamp']),
@@ -346,7 +346,7 @@ async function runTests() {
   );
 
   // Test Lemmy
-  log('\n[3/8] Lemmy API', 'cyan');
+  log('\n[3/9] Lemmy API', 'cyan');
   await testEndpoint('Lemmy', '/api/lemmy', [
     validateArray(5),
     validateFields(['id', 'title', 'source', 'score', 'comments', 'timestamp']),
@@ -361,8 +361,26 @@ async function runTests() {
     }
   ]);
 
+  // Test open social signals
+  log('\n[4/9] Open Social API', 'cyan');
+  await testEndpoint('Open Social', '/api/open-social', [
+    validateArray(5),
+    validateFields(['id', 'title', 'source', 'score', 'timestamp', 'url']),
+    validateTimestamps(),
+    (data, name) => {
+      if (!Array.isArray(data)) return;
+      const expected = ['Bluesky Discover', 'Mastodon Trending'];
+      const missing = expected.filter(source => !data.some(item => item.source === source));
+      if (missing.length > 0) {
+        fail(`${name} coverage`, `Missing ${missing.join(', ')}`);
+      } else {
+        pass(`${name} includes both public social adapters`);
+      }
+    },
+  ]);
+
   // Test Hacker News
-  log('\n[4/8] Hacker News API', 'cyan');
+  log('\n[5/9] Hacker News API', 'cyan');
   await testEndpoint('Hacker News', '/api/hackernews', [
     validateArray(10),
     validateFields(['id', 'title', 'source', 'score', 'comments', 'timestamp']),
@@ -377,7 +395,7 @@ async function runTests() {
   ]);
 
   // Test Tech News
-  log('\n[5/8] Tech News API', 'cyan');
+  log('\n[6/9] Tech News API', 'cyan');
   await testEndpoint('Tech News', '/api/tech', [
     validateArray(5),
     validateFields(['id', 'title', 'source', 'timestamp']),
@@ -386,7 +404,7 @@ async function runTests() {
   ]);
 
   // Test Markets
-  log('\n[6/8] Markets API', 'cyan');
+  log('\n[7/9] Markets API', 'cyan');
   await testEndpoint('Markets', '/api/markets', [
     (data, name) => {
       if (!data.indices || !Array.isArray(data.indices)) {
@@ -416,7 +434,7 @@ async function runTests() {
   ]);
 
   // Test Weather
-  log('\n[7/8] Weather API', 'cyan');
+  log('\n[8/9] Weather API', 'cyan');
   await testEndpoint('Weather', '/api/weather?zip=22314', [
     validateFields(['temperature', 'condition', 'location', 'lat', 'lon', 'forecast']),
     (data, name) => {
@@ -438,7 +456,7 @@ async function runTests() {
   ]);
 
   // Test Predictions
-  log('\n[8/8] Predictions API', 'cyan');
+  log('\n[9/9] Predictions API', 'cyan');
   await testEndpoint('Predictions', '/api/predictions', [
     validateArray(3),
     validateFields(['id', 'question', 'yesPrice', 'category', 'source', 'url']),
@@ -497,26 +515,6 @@ function printSummary() {
     for (const improvement of results.improvements) {
       log(`  • ${improvement.test}: ${improvement.reason}`, 'yellow');
     }
-  }
-
-  // Additional recommendations based on test results
-  log('\n--- General Recommendations ---', 'cyan');
-
-  const recommendations = [
-    'Add request caching headers (ETag, Last-Modified) for better client caching',
-    'Implement request rate limiting to prevent API abuse',
-    'Add error tracking/logging service integration (Sentry, etc.)',
-    'Consider adding API response compression (gzip)',
-    'Add input validation for query parameters (zip code format, etc.)',
-    'Implement circuit breaker pattern for external API calls',
-    'Add health check endpoints for each data source individually',
-    'Consider WebSocket for real-time updates instead of polling',
-    'Add API versioning (e.g., /api/v1/headlines)',
-    'Implement request timeout configuration per endpoint',
-  ];
-
-  for (const rec of recommendations) {
-    log(`  → ${rec}`, 'dim');
   }
 
   log('\n' + '='.repeat(60), 'blue');

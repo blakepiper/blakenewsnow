@@ -1,5 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ANIMATION_INTERVALS } from '../config';
+import {
+  interpolateGlobeCenter,
+  inverseOrthographic,
+  type GeoCoordinate,
+} from '../utils/globeProjection';
+
+const GLOBE_SIZE = 154;
+const ROTATION_DURATION = 1_000;
+
+interface TextureData {
+  pixels: Uint8ClampedArray;
+  width: number;
+  height: number;
+}
+
+let texturePromise: Promise<TextureData> | null = null;
 
 const CITIES = [
   { name: 'Washington, DC', lat: 38.9, lon: -77, timeZone: 'America/New_York' },
@@ -22,15 +38,82 @@ function getLocalTime(timeZone: string): string {
   }).format(new Date());
 }
 
-function getTexturePosition(lat: number, lon: number): string {
-  const x = 50 + lon / 3.6;
-  const y = 50 - lat * 0.18;
-  return `${x}% ${y}%`;
+function loadTexture(): Promise<TextureData> {
+  if (texturePromise) return texturePromise;
+
+  texturePromise = new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+
+      if (!context) {
+        reject(new Error('Unable to prepare the globe texture'));
+        return;
+      }
+
+      context.drawImage(image, 0, 0);
+      resolve({
+        pixels: context.getImageData(0, 0, canvas.width, canvas.height).data,
+        width: canvas.width,
+        height: canvas.height,
+      });
+    };
+    image.onerror = () => reject(new Error('Unable to load the globe texture'));
+    image.src = '/textures/earth-day.jpg';
+  });
+
+  return texturePromise;
+}
+
+function renderGlobe(
+  canvas: HTMLCanvasElement,
+  texture: TextureData,
+  center: GeoCoordinate
+): void {
+  const context = canvas.getContext('2d');
+  if (!context) return;
+
+  const output = context.createImageData(GLOBE_SIZE, GLOBE_SIZE);
+  const globeRadius = GLOBE_SIZE / 2;
+
+  for (let pixelY = 0; pixelY < GLOBE_SIZE; pixelY += 1) {
+    const normalizedY = (globeRadius - (pixelY + 0.5)) / globeRadius;
+
+    for (let pixelX = 0; pixelX < GLOBE_SIZE; pixelX += 1) {
+      const normalizedX = (pixelX + 0.5 - globeRadius) / globeRadius;
+      const coordinate = inverseOrthographic(normalizedX, normalizedY, center);
+      if (!coordinate) continue;
+
+      const textureX = Math.min(
+        texture.width - 1,
+        Math.floor(((coordinate.lon + 180) / 360) * texture.width)
+      );
+      const textureY = Math.min(
+        texture.height - 1,
+        Math.floor(((90 - coordinate.lat) / 180) * texture.height)
+      );
+      const sourceIndex = (textureY * texture.width + textureX) * 4;
+      const targetIndex = (pixelY * GLOBE_SIZE + pixelX) * 4;
+
+      output.data[targetIndex] = texture.pixels[sourceIndex];
+      output.data[targetIndex + 1] = texture.pixels[sourceIndex + 1];
+      output.data[targetIndex + 2] = texture.pixels[sourceIndex + 2];
+      output.data[targetIndex + 3] = 255;
+    }
+  }
+
+  context.putImageData(output, 0, 0);
 }
 
 export function Globe() {
   const [cityIndex, setCityIndex] = useState(0);
   const [, setClockTick] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const renderedCenter = useRef<GeoCoordinate>(CITIES[0]);
   const city = CITIES[cityIndex];
 
   useEffect(() => {
@@ -44,6 +127,43 @@ export function Globe() {
       window.clearInterval(clock);
     };
   }, []);
+
+  useEffect(() => {
+    let animationFrame = 0;
+    let cancelled = false;
+    const destination = { lat: city.lat, lon: city.lon };
+    const origin = renderedCenter.current;
+
+    loadTexture().then(texture => {
+      if (cancelled || !canvasRef.current) return;
+
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const startedAt = performance.now();
+
+      const drawFrame = (now: number) => {
+        if (cancelled || !canvasRef.current) return;
+
+        const elapsed = reduceMotion ? 1 : Math.min(1, (now - startedAt) / ROTATION_DURATION);
+        const eased = 1 - Math.pow(1 - elapsed, 3);
+        const center = interpolateGlobeCenter(origin, destination, eased);
+        renderGlobe(canvasRef.current, texture, center);
+        renderedCenter.current = center;
+
+        if (elapsed < 1) {
+          animationFrame = window.requestAnimationFrame(drawFrame);
+        }
+      };
+
+      animationFrame = window.requestAnimationFrame(drawFrame);
+    }).catch(error => {
+      console.error('[GLOBE]', error);
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(animationFrame);
+    };
+  }, [city.lat, city.lon]);
 
   const localTime = getLocalTime(city.timeZone);
 
@@ -61,13 +181,12 @@ export function Globe() {
         aria-label={`Globe focused on ${city.name}. Show next city`}
         className="absolute left-1/2 top-[46%] h-[154px] w-[154px] -translate-x-1/2 -translate-y-1/2 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
       >
-        <span
-          className="absolute inset-0 rounded-full bg-[#17304a] bg-no-repeat shadow-[inset_-25px_-10px_35px_rgba(0,0,0,0.78),inset_10px_8px_22px_rgba(147,197,253,0.18),0_0_24px_rgba(59,130,246,0.18)] transition-[background-position] duration-[1800ms] ease-out motion-reduce:transition-none"
-          style={{
-            backgroundImage: "url('/textures/earth-day.jpg')",
-            backgroundSize: 'auto 116%',
-            backgroundPosition: getTexturePosition(city.lat, city.lon),
-          }}
+        <canvas
+          ref={canvasRef}
+          width={GLOBE_SIZE}
+          height={GLOBE_SIZE}
+          className="absolute inset-0 h-full w-full rounded-full bg-[#17304a] shadow-[inset_-25px_-10px_35px_rgba(0,0,0,0.78),inset_10px_8px_22px_rgba(147,197,253,0.18),0_0_24px_rgba(59,130,246,0.18)]"
+          aria-hidden="true"
         />
 
         <svg

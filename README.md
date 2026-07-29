@@ -4,133 +4,172 @@
   <img src="./public/brand-logo.png" alt="Blake News Now" width="720">
 </p>
 
-A dense, keyboard-friendly dashboard for current news, technology, social posts, markets, weather, and prediction data.
+<p align="center">
+  A high-density dashboard for current news, social signals, markets, weather, and prediction data.
+</p>
 
-The **What's Happening Now** briefing groups current coverage into six distinct storylines.
-Syndicated copies count as one independent report, while the original publisher links remain
-available. Every displayed claim is an actual linked headline, and no external AI service is used.
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#data-sources">Data sources</a> ·
+  <a href="./LICENSE">MIT License</a>
+</p>
 
-Clicking a story opens the built-in text-only reader. The server uses Mozilla Readability to
-extract the article body and sends plain text to the app; publisher scripts, cookie prompts,
-advertising, popups, and embeds are never rendered. The reader does not bypass authentication
-or paywalls, and an **Open source** button is always available. When a publisher blocks full
-retrieval, the reader falls back to safe page metadata or the excerpt supplied in that
-publisher's RSS feed instead of presenting an empty preview.
+## Overview
 
-When another enabled publisher is covering the same event, the reader goes one step further:
-it matches related headlines locally, tries those sources in parallel, and displays the first
-accessible full-text version. The UI labels the substitution, shows the terms used for the
-match, warns that details may differ, and preserves links to both the originally selected
-story and the reader source. It does not attempt to defeat authentication or paywalls.
+Blake News Now brings time-sensitive information into a single, keyboard-friendly interface. It aggregates current reporting and public social signals, removes stale and duplicate entries, and presents the result alongside weather, market, and prediction data.
 
-## Start the app
+The application is self-hosted and credential-free by default. Its **What's Happening Now** briefing runs entirely in the browser using local TF-IDF similarity, event clustering, and extractive ranking. It does not send stories to an LLM or another AI service.
+
+## Features
+
+- **Current-first aggregation** — RSS, Atom, RDF, and public APIs are normalized behind a seven-day freshness policy.
+- **Six-story briefing** — related coverage is clustered into six skimmable storylines when enough current reporting is available.
+- **Syndication-aware ranking** — syndicated copies are grouped so repeated wire coverage does not inflate independent-source counts.
+- **Text-only article reader** — Mozilla Readability extracts article text without rendering publisher scripts, advertisements, cookie prompts, popups, or embeds.
+- **Verified full-text alternatives** — when a publisher exposes only an excerpt, local topic similarity finds related reporting and offers a link only after the reader verifies that the alternative has full text. The reader switches sources only when clicked and preserves both links.
+- **Source controls** — individual publishers and communities can be enabled or disabled from settings, with select-all and unselect-all actions.
+- **Open social signals** — integrates Lemmy, Bluesky Discover, Mastodon trending links, Hacker News, and selected 4chan boards without application credentials.
+- **Live context panels** — weather radar, financial markets, cryptocurrency, prediction markets, ticker data, and an interactive geographic globe.
+- **Dense interaction model** — keyboard navigation, search, responsive layouts, and persistent draggable pane sizes.
+
+## Quick start
+
+### Requirements
+
+- Node.js 24.18 LTS or Node.js 26+
+- npm 10 or newer
+
+### Run locally
 
 ```bash
-npm install --legacy-peer-deps
+git clone https://github.com/blakepiper/blakenewsnow.git
+cd blakenewsnow
+npm install
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The Express API runs on port 3001.
+Open [http://localhost:3000](http://localhost:3000). The Vite frontend runs on port `3000` and the Express API runs on port `3001`.
 
-Set `CORS_ORIGIN` to a comma-separated list of frontend origins when the UI is hosted somewhere else.
+No API keys are required for the currently configured integrations.
 
-`--legacy-peer-deps` is needed because this project intentionally pins the retired Material-UI 4 package line. The installed runtime versions are mutually compatible:
+## Configuration
 
-- React 17.0.2
-- React DOM 17.0.2
-- Material-UI core 4.12.4
-- Material-UI icons 4.11.3
+Runtime configuration is provided through environment variables:
 
-## Current-feed guarantees
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3001` | Express API port |
+| `CORS_ORIGIN` | `http://localhost:3000,http://127.0.0.1:3000` | Comma-separated frontend origins allowed to call the API |
+| `VITE_API_URL` | `http://localhost:3001` | API base URL embedded in the frontend build |
 
-The server applies the following rules before a headline can reach the display:
+For a split frontend/API deployment, set `VITE_API_URL` before building the frontend and set `CORS_ORIGIN` on the API server to the deployed frontend origin.
 
-- Parse RSS, RDF/RSS 1.0, and Atom with `fast-xml-parser`, including namespaced date fields and Atom link attributes.
-- Never treat a missing or invalid publication date as the current time.
-- Infer a date from common `/YYYY/MM/DD/` article URLs when a feed omits it.
-- Reject undated items, invalid links, future timestamps, and stories older than seven days.
-- Sort by publication time, newest first.
-- Deduplicate repeated titles.
-- Cap each publisher's initial contribution so high-volume feeds cannot monopolize the result.
-- Apply source selections before the response limit so narrow publisher filters cannot return an empty feed.
-- Coalesce simultaneous requests so several open clients do not stampede upstream feeds.
-
-The client repeats the date, link, and freshness checks as a second line of defense. On desktop, the two-column feed uses row-major order: ranks 1 and 2 share the first row, ranks 3 and 4 share the second, and so on.
-
-The What's Happening Now panel fills six cells on every feed filter when at least six
-current reports are available. Desktop pane dimensions are draggable and persist in
-local settings: drag the divider beside the dashboard or the handles below its panes.
+Location, source selections, read state, and pane dimensions are stored locally in the browser.
 
 ## Commands
 
-```bash
-npm start          # API and Vite development server
-npm run server     # API only
-npm run server:watch # API only, restarting when server files change
-npm run dev        # frontend only
-npm run build      # TypeScript and production bundle
-npm run lint
-npm run test:unit  # parser, ranking, reader, and briefing regressions
-npm run test:api   # live API diagnostics; requires npm run server
-npm run audit:sources # direct health/freshness audit of every RSS/Atom URL
-```
+| Command | Purpose |
+|---|---|
+| `npm start` | Run the API and frontend development servers |
+| `npm run dev` | Run the Vite frontend only |
+| `npm run server` | Run the Express API only |
+| `npm run server:watch` | Run the API with automatic restarts |
+| `npm run build` | Type-check and create the production frontend bundle |
+| `npm run preview` | Preview the production frontend bundle |
+| `npm run lint` | Run ESLint |
+| `npm run test:unit` | Run deterministic unit and regression tests |
+| `npm run test:api` | Exercise live API endpoints; requires the API server |
+| `npm run test:all` | Run lint, unit tests, and live API diagnostics |
+| `npm run audit:sources` | Check configured RSS and Atom feeds for health and freshness |
+
+## How stories reach the display
+
+The server and client apply complementary validation:
+
+1. Fetch configured feeds concurrently and coalesce simultaneous requests.
+2. Parse RSS, Atom, and RDF feeds, including namespaced dates and alternate links.
+3. Reject invalid URLs, missing or invalid dates, future timestamps, and entries older than seven days.
+4. Infer dates only from recognized date-bearing article URL patterns when a feed omits them.
+5. Normalize titles and remove repeated or substantially matching entries.
+6. Balance publishers before filling remaining capacity so one high-volume source cannot dominate.
+7. Apply the user's source selection before response limits are calculated.
+8. Cluster related reporting locally for the six-cell briefing.
+
+The reader is deliberately separate from the publisher page. It only returns extracted text and safe metadata. It blocks private and local network destinations and does not attempt to bypass authentication or paywalls.
 
 ## Data sources
 
-News sources currently configured:
+| Category | Sources |
+|---|---|
+| General news | NPR, BBC, CBC News, DW, The Guardian, Al Jazeera, ABC News, CBS News, The New York Times, Bloomberg, Financial Times, The Wall Street Journal, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart |
+| Technology | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters, MIT Technology Review, BleepingComputer, Rest of World, The Register, 404 Media |
+| Social | Lemmy communities, Bluesky Discover, Mastodon trending links, 4chan `/news/`, `/pol/`, and `/lit/` |
+| Markets | Yahoo Finance, CoinGecko |
+| Predictions | Polymarket, pizzint.watch |
+| Weather | National Weather Service, RainViewer |
 
-- NPR, BBC, CBC News, DW, Guardian, Al Jazeera
-- ABC News, CBS News, NY Times, Bloomberg, Financial Times, Wall Street Journal
-- NBC News
-- PBS NewsHour, Axios, The Hill, Vox
-- Fox News, Politico, Semafor, The Intercept, ProPublica
-- Foreign Policy, Breitbart
-
-Technology and social sources:
-
-- Ars Technica, The Verge, TechCrunch, Wired, Lobsters
-- MIT Technology Review, BleepingComputer, Rest of World, The Register, 404 Media
-- Hacker News
-- Lemmy c/news, c/world, and c/technology
-- 4chan /news/, /pol/, and /lit/
-
-Each news and technology response is capped per publisher before remaining slots are filled, so a high-volume feed cannot monopolize the display. All feed items must carry a valid article URL and a timestamp no more than seven days old. Reddit was removed after repeated anonymous RSS/JSON throttling made it return empty data; Lemmy supplies structured, scored social-news posts without credentials.
-
-Other data comes from the National Weather Service, RainViewer, Yahoo Finance, CoinGecko, Polymarket, and pizzint.watch.
+Upstream availability and response formats can change without notice. Run `npm run audit:sources` when diagnosing missing or stale content.
 
 ## Keyboard shortcuts
 
 | Key | Action |
 |---|---|
-| `j` or `Down` | Next story |
-| `k` or `Up` | Previous story |
-| `Enter` | Open selected story |
-| `/` | Search |
-| `?` | Keyboard shortcuts |
-| `Ctrl+,` | Settings |
-| `1-4` | Change feed filter |
+| `j` or `↓` | Select the next story |
+| `k` or `↑` | Select the previous story |
+| `Enter` | Open the selected story in the text reader |
+| `/` | Open search |
+| `?` | Show keyboard shortcuts |
+| `Ctrl+,` | Open settings |
+| `1`–`4` | Change the active feed filter |
 | `Esc` | Close the active dialog |
 
 ## Architecture
 
 ```text
 src/
-  components/       Dashboard surfaces
-  hooks/            Feed orchestration, settings, keyboard behavior
-  ml/               Local headline clustering and extractive briefing
-  stores/           Local settings persistence
-  theme.ts          Material-UI 4 theme
-  App.tsx           Main layout and interaction wiring
+  components/           Dashboard panels and dialogs
+  hooks/                Feed orchestration, settings, and keyboard behavior
+  ml/                   Local clustering and extractive briefing logic
+  stores/               Browser-persisted settings
+  utils/                Formatting and geographic projection helpers
+  App.tsx               Application layout and interaction wiring
+  theme.ts              MUI theme
 
 server/
-  article-preview.cjs Article fetching, SSRF protection, and readable-text extraction
-  data-feeds.cjs    Upstream services, caching, and API routes
-  rss.cjs           RSS/Atom parsing and freshness policy
-  proxy.cjs         Express server and radar tile proxy
+  article-preview.cjs   Safe fetching and readable-text extraction
+  data-feeds.cjs        Feed integrations, normalization, caching, and routes
+  rss.cjs               RSS, Atom, and RDF parsing with freshness enforcement
+  proxy.cjs             Express server and restricted radar-tile proxy
 
 tests/
-  article-preview.test.cjs Reader extraction and network-safety tests
-  rss.test.cjs      Deterministic feed regression tests
-  now-briefing.test.ts  Local ML clustering and extraction tests
-  diagnostic.cjs    Live API diagnostics
+  *.test.cjs            Server, parser, feed, and security regressions
+  *.test.ts             Client logic, settings, briefing, and projection tests
+  diagnostic.cjs        Live API diagnostics
 ```
+
+### Technology
+
+- React 19 and TypeScript
+- Material UI 9 with Emotion
+- Tailwind CSS 4
+- Vite 8
+- Express 5
+- Mozilla Readability and jsdom
+
+## Deployment notes
+
+`npm run build` produces the static frontend in `dist/`. Serve that directory through a static host and run `npm run server` as a separate Node.js service.
+
+The API performs network requests to third-party services and keeps short-lived data in memory. For an internet-facing deployment, place it behind a production reverse proxy with request rate limits, timeouts, TLS, and normal process supervision.
+
+## Content and privacy
+
+Blake News Now does not redistribute complete publisher pages. Headlines, excerpts, extracted text, and external links remain attributable to their respective sources. Source terms and availability govern upstream content.
+
+Settings and reading state stay in the browser's local storage. The application does not include user accounts or analytics.
+
+## License
+
+Released under the [MIT License](./LICENSE).

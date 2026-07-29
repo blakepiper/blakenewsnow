@@ -1,8 +1,8 @@
-import { AppBar, IconButton, Toolbar, Tooltip } from '@material-ui/core';
-import { makeStyles } from '@material-ui/core/styles';
-import HelpOutlineIcon from '@material-ui/icons/HelpOutline';
-import SearchIcon from '@material-ui/icons/Search';
-import SettingsOutlinedIcon from '@material-ui/icons/SettingsOutlined';
+import { AppBar, IconButton, Toolbar, Tooltip } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
+import SearchIcon from '@mui/icons-material/Search';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import type { FilterType } from './FilterPills';
 import { FilterPills } from './FilterPills';
 
@@ -14,95 +14,99 @@ interface HeaderProps {
   onSettingsOpen: () => void;
 }
 
-const useStyles = makeStyles(theme => ({
-  appBar: {
-    flexShrink: 0,
-    borderBottom: `1px solid ${theme.palette.divider}`,
-    background: '#0b0d0f',
+const AppHeader = styled(AppBar)(({ theme }) => ({
+  flexShrink: 0,
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  background: '#0b0d0f',
+  color: theme.palette.text.primary,
+  paddingTop: 'var(--sat)',
+}));
+
+const HeaderToolbar = styled(Toolbar)({
+  minHeight: 40,
+  padding: '0 12px',
+  justifyContent: 'space-between',
+  '@media (min-width: 768px)': {
+    minHeight: 32,
+    padding: '0 8px',
+  },
+});
+
+const BrandGroup = styled('div')({
+  display: 'flex',
+  minWidth: 0,
+  alignItems: 'center',
+  gap: 7,
+});
+
+const BrandLogo = styled('img')({
+  width: 118,
+  height: 24,
+  objectFit: 'contain',
+  objectPosition: 'left center',
+  '@media (max-width: 420px)': {
+    width: 102,
+  },
+});
+
+const HiddenTitle = styled('h1')({
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: 'hidden',
+  clip: 'rect(0, 0, 0, 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+});
+
+const HeaderActions = styled('div')({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 2,
+});
+
+const ActionButton = styled(IconButton)(({ theme }) => ({
+  width: 34,
+  height: 34,
+  padding: 0,
+  color: theme.palette.text.secondary,
+  borderRadius: theme.shape.borderRadius,
+  '&:hover': {
     color: theme.palette.text.primary,
-    paddingTop: 'var(--sat)',
+    backgroundColor: 'rgba(225, 235, 242, 0.07)',
   },
-  toolbar: {
-    minHeight: 40,
-    padding: '0 12px',
-    justifyContent: 'space-between',
-    '@media (min-width: 768px)': {
-      minHeight: 32,
-      padding: '0 8px',
-    },
+  '&:active': {
+    transform: 'translateY(1px)',
   },
-  brandGroup: {
-    display: 'flex',
-    minWidth: 0,
-    alignItems: 'center',
-    gap: 7,
-  },
-  logo: {
-    width: 118,
-    height: 24,
-    objectFit: 'contain',
-    objectPosition: 'left center',
-    '@media (max-width: 420px)': {
-      width: 102,
-    },
-  },
-  title: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    padding: 0,
-    margin: -1,
-    overflow: 'hidden',
-    clip: 'rect(0, 0, 0, 0)',
-    whiteSpace: 'nowrap',
-    border: 0,
-  },
-  actions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 2,
-  },
-  action: {
-    width: 34,
-    height: 34,
-    padding: 0,
-    color: theme.palette.text.secondary,
-    borderRadius: theme.shape.borderRadius,
-    '&:hover': {
-      color: theme.palette.text.primary,
-      backgroundColor: 'rgba(225, 235, 242, 0.07)',
-    },
-    '&:active': {
-      transform: 'translateY(1px)',
-    },
-    '@media (min-width: 768px)': {
-      width: 26,
-      height: 26,
-    },
-  },
-  icon: {
-    fontSize: 17,
-  },
-  mobileFilters: {
-    overflowX: 'auto',
-    borderTop: '1px solid rgba(225, 235, 242, 0.06)',
-    '@media (min-width: 768px)': {
-      display: 'none',
-    },
-  },
-  desktopFilters: {
-    display: 'none',
-    '@media (min-width: 768px)': {
-      display: 'block',
-    },
-  },
-  desktopOnly: {
-    display: 'none',
-    '@media (min-width: 768px)': {
-      display: 'inline-flex',
-    },
+  '@media (min-width: 768px)': {
+    width: 26,
+    height: 26,
   },
 }));
+
+const DesktopActionButton = styled(ActionButton)({
+  display: 'none',
+  '@media (min-width: 768px)': {
+    display: 'inline-flex',
+  },
+});
+
+const MobileFilters = styled('div')({
+  overflowX: 'auto',
+  borderTop: '1px solid rgba(225, 235, 242, 0.06)',
+  '@media (min-width: 768px)': {
+    display: 'none',
+  },
+});
+
+const DesktopFilters = styled('div')({
+  display: 'none',
+  '@media (min-width: 768px)': {
+    display: 'block',
+  },
+});
 
 export function Header({
   activeFilter,
@@ -111,51 +115,48 @@ export function Header({
   onHelpOpen,
   onSettingsOpen,
 }: HeaderProps) {
-  const classes = useStyles();
   const filters = (
     <FilterPills activeFilter={activeFilter} onFilterChange={onFilterChange} />
   );
 
   return (
-    <AppBar position="static" elevation={0} color="transparent" component="header" className={classes.appBar}>
-      <Toolbar variant="dense" disableGutters className={classes.toolbar}>
-        <div className={classes.brandGroup}>
-          <img
+    <AppHeader position="static" elevation={0} color="transparent" as="header">
+      <HeaderToolbar variant="dense" disableGutters>
+        <BrandGroup>
+          <BrandLogo
             src="/brand-logo.png"
             alt="Blake News Now"
-            className={classes.logo}
             onError={event => {
               event.currentTarget.style.display = 'none';
             }}
           />
-          <h1 className={classes.title}>Blake News Now</h1>
-          <div className={classes.desktopFilters}>{filters}</div>
-        </div>
+          <HiddenTitle>Blake News Now</HiddenTitle>
+          <DesktopFilters>{filters}</DesktopFilters>
+        </BrandGroup>
 
-        <div className={classes.actions}>
+        <HeaderActions>
           <Tooltip title="Search (/)">
-            <IconButton className={classes.action} onClick={onSearchOpen} aria-label="Search">
-              <SearchIcon className={classes.icon} />
-            </IconButton>
+            <ActionButton onClick={onSearchOpen} aria-label="Search">
+              <SearchIcon sx={{ fontSize: 17 }} />
+            </ActionButton>
           </Tooltip>
           <Tooltip title="Keyboard shortcuts (?)">
-            <IconButton
-              className={`${classes.action} ${classes.desktopOnly}`}
+            <DesktopActionButton
               onClick={onHelpOpen}
               aria-label="Keyboard shortcuts"
             >
-              <HelpOutlineIcon className={classes.icon} />
-            </IconButton>
+              <HelpOutlineIcon sx={{ fontSize: 17 }} />
+            </DesktopActionButton>
           </Tooltip>
           <Tooltip title="Settings (Ctrl+,)">
-            <IconButton className={classes.action} onClick={onSettingsOpen} aria-label="Settings">
-              <SettingsOutlinedIcon className={classes.icon} />
-            </IconButton>
+            <ActionButton onClick={onSettingsOpen} aria-label="Settings">
+              <SettingsOutlinedIcon sx={{ fontSize: 17 }} />
+            </ActionButton>
           </Tooltip>
-        </div>
-      </Toolbar>
+        </HeaderActions>
+      </HeaderToolbar>
 
-      <div className={classes.mobileFilters}>{filters}</div>
-    </AppBar>
+      <MobileFilters>{filters}</MobileFilters>
+    </AppHeader>
   );
 }

@@ -97,7 +97,8 @@ const RSS_FEEDS = {
   ],
 };
 
-const LEMMY_COMMUNITIES = ['news', 'world', 'technology'];
+const LEMMY_COMMUNITIES = ['news', 'world', 'technology', 'politics', 'science'];
+const BLUESKY_DISCOVER_FEED = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot';
 
 // Hacker News API base
 const HN_API = 'https://hacker-news.firebaseio.com/v0';
@@ -118,6 +119,7 @@ const cache = {
   polymarket: { data: null, timestamp: 0 },
   pizzint: { data: null, timestamp: 0 },
   lemmy: { data: null, timestamp: 0 },
+  openSocial: { data: null, timestamp: 0 },
   hackernews: { data: null, timestamp: 0 },
   fourchan: { data: null, timestamp: 0 },
   geocode: {},  // zip -> {lat, lon} cache
@@ -135,6 +137,7 @@ const CACHE_TTL = {
   polymarket: 5 * 60 * 1000,
   pizzint: 5 * 60 * 1000,
   lemmy: 2 * 60 * 1000,
+  openSocial: 2 * 60 * 1000,
   hackernews: 2 * 60 * 1000, // 2 minutes
   fourchan: 2 * 60 * 1000,   // 2 minutes
 };
@@ -1281,6 +1284,161 @@ async function fetchLemmy() {
 }
 
 // ============================================
+// Fetch credential-free social signals
+// ============================================
+function normalizeBlueskyPost(view, now = Date.now()) {
+  const post = view?.post || {};
+  const record = post.record || {};
+  const author = post.author || {};
+  const timestamp = new Date(record.createdAt);
+  const timestampMs = timestamp.getTime();
+  const title = stripHtml(decodeEntities(record.text || '')).replace(/\s+/g, ' ').trim();
+  const contentLabels = [
+    ...(post.labels || []).map(label => label?.val),
+    ...(record.labels?.values || []),
+  ].filter(Boolean);
+
+  if (
+    !post.uri ||
+    !author.handle ||
+    !title ||
+    contentLabels.some(label => ['porn', 'sexual', 'nudity', 'graphic-media'].includes(label)) ||
+    !Number.isFinite(timestampMs) ||
+    timestampMs > now + 15 * 60 * 1000 ||
+    timestampMs < now - CONTENT_MAX_AGE.headlines
+  ) {
+    return null;
+  }
+
+  const postKey = post.uri.split('/').pop();
+  if (!postKey) return null;
+  const likes = Number(post.likeCount) || 0;
+  const reposts = Number(post.repostCount) || 0;
+  const replies = Number(post.replyCount) || 0;
+  const external = post.embed?.external;
+
+  return {
+    id: stableId('bluesky', post.uri, author.handle),
+    title: title.slice(0, 280),
+    source: 'Bluesky Discover',
+    community: 'discover',
+    score: likes + reposts,
+    comments: replies,
+    url: `https://bsky.app/profile/${encodeURIComponent(author.handle)}/post/${encodeURIComponent(postKey)}`,
+    permalink: `https://bsky.app/profile/${encodeURIComponent(author.handle)}/post/${encodeURIComponent(postKey)}`,
+    timestamp: timestamp.toISOString(),
+    description: stripHtml(decodeEntities(external?.description || '')).slice(0, 1200),
+    rank: likes + (reposts * 2) + replies + 1,
+  };
+}
+
+function normalizeMastodonLink(link, now = Date.now()) {
+  const title = stripHtml(decodeEntities(link?.title || '')).replace(/\s+/g, ' ').trim();
+  const history = Array.isArray(link?.history) ? link.history : [];
+  const activeHistory = history
+    .map(entry => ({
+      timestamp: Number(entry?.day) * 1000,
+      uses: Number(entry?.uses) || 0,
+      accounts: Number(entry?.accounts) || 0,
+    }))
+    .filter(entry => Number.isFinite(entry.timestamp) && entry.timestamp > 0 && entry.uses > 0);
+  const timestampMs = Math.max(0, ...activeHistory.map(entry => entry.timestamp));
+
+  let url;
+  try {
+    url = new URL(link?.url || '');
+  } catch {
+    return null;
+  }
+
+  if (
+    !title ||
+    !['http:', 'https:'].includes(url.protocol) ||
+    !timestampMs ||
+    timestampMs > now + 15 * 60 * 1000 ||
+    timestampMs < now - CONTENT_MAX_AGE.headlines
+  ) {
+    return null;
+  }
+
+  const uses = activeHistory.reduce((sum, entry) => sum + entry.uses, 0);
+  const accounts = activeHistory.reduce((sum, entry) => sum + entry.accounts, 0);
+
+  return {
+    id: stableId('mastodon', url.href, link.provider_name || ''),
+    title: title.slice(0, 280),
+    source: 'Mastodon Trending',
+    community: 'trending-links',
+    score: uses,
+    url: url.href,
+    permalink: url.href,
+    timestamp: new Date(timestampMs).toISOString(),
+    description: stripHtml(decodeEntities(link.description || '')).slice(0, 1200),
+    rank: uses + accounts + 1,
+  };
+}
+
+async function fetchOpenSocial() {
+  if (isCacheValid('openSocial')) {
+    return cache.openSocial.data;
+  }
+
+  console.log('[DATA] Fetching open social signals...');
+  const [blueskyPosts, mastodonLinks] = await Promise.all([
+    (async () => {
+      try {
+        const query = new URLSearchParams({
+          feed: BLUESKY_DISCOVER_FEED,
+          limit: '40',
+        });
+        const { data } = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.feed.getFeed?${query}`, {
+          accept: 'application/json',
+          headers: { 'Accept-Language': 'en' },
+          timeout: 10000,
+        });
+        const document = JSON.parse(data);
+        const posts = (document.feed || [])
+          .map(view => normalizeBlueskyPost(view))
+          .filter(Boolean);
+        console.log(`[SOCIAL] Bluesky Discover: ${posts.length} current posts`);
+        return posts;
+      } catch (err) {
+        console.error('[SOCIAL] Bluesky Discover failed:', err.message);
+        return [];
+      }
+    })(),
+    (async () => {
+      try {
+        const { data } = await fetch('https://mastodon.social/api/v1/trends/links?limit=20', {
+          accept: 'application/json',
+          timeout: 10000,
+        });
+        const links = JSON.parse(data)
+          .map(link => normalizeMastodonLink(link))
+          .filter(Boolean);
+        console.log(`[SOCIAL] Mastodon Trending: ${links.length} current links`);
+        return links;
+      } catch (err) {
+        console.error('[SOCIAL] Mastodon Trending failed:', err.message);
+        return [];
+      }
+    })(),
+  ]);
+
+  const result = selectDiverseItems(
+    [...blueskyPosts, ...mastodonLinks].sort((a, b) => b.rank - a.rank),
+    30,
+    15
+  ).map(({ rank, ...item }) => item);
+
+  if (result.length > 0) {
+    cache.openSocial = { data: result, timestamp: Date.now() };
+    return result;
+  }
+  return cache.openSocial.data || [];
+}
+
+// ============================================
 // Fetch Hacker News
 // ============================================
 async function fetchHackerNews() {
@@ -1498,6 +1656,16 @@ function registerRoutes(app) {
     }
   });
 
+  app.get('/api/open-social', async (req, res) => {
+    try {
+      const data = await dedupeRequest('openSocial', fetchOpenSocial);
+      res.json(data);
+    } catch (err) {
+      console.error('[API] Open social error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/api/hackernews', async (req, res) => {
     try {
       const data = await dedupeRequest('hackernews', fetchHackerNews);
@@ -1528,7 +1696,7 @@ function registerRoutes(app) {
     }
   });
 
-  console.log('[DATA] API routes registered: /api/headlines, /api/ticker, /api/markets, /api/crypto, /api/weather, /api/radar, /api/predictions, /api/lemmy, /api/hackernews, /api/4chan, /api/tech');
+  console.log('[DATA] API routes registered: /api/headlines, /api/ticker, /api/markets, /api/crypto, /api/weather, /api/radar, /api/predictions, /api/lemmy, /api/open-social, /api/hackernews, /api/4chan, /api/tech');
 }
 
 module.exports = {
@@ -1536,6 +1704,8 @@ module.exports = {
   normalizePolymarketMarket,
   selectDiverseItems,
   selectHeadlineItems,
+  normalizeBlueskyPost,
+  normalizeMastodonLink,
   registerRoutes,
   fetchHeadlines,
   fetchTicker,
@@ -1545,6 +1715,7 @@ module.exports = {
   fetchRadarData,
   fetchPredictions,
   fetchLemmy,
+  fetchOpenSocial,
   fetchHackerNews,
   fetchFourChan,
   fetchTechNews,

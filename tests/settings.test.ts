@@ -15,6 +15,20 @@ test('includes the requested financial publishers as enabled news sources', () =
   }
 });
 
+test('includes credential-free federated and open social sources', () => {
+  const sources = new Map(DEFAULT_SETTINGS.sources.map(source => [source.id, source]));
+
+  for (const id of [
+    'lemmy-politics',
+    'lemmy-science',
+    'bluesky-discover',
+    'mastodon-trending',
+  ]) {
+    assert.equal(sources.get(id)?.enabled, true);
+    assert.equal(sources.get(id)?.category, 'social');
+  }
+});
+
 test('selects and unselects every source in one immutable update', () => {
   const unselected = setAllSources(DEFAULT_SETTINGS, false);
   const selected = setAllSources(unselected, true);

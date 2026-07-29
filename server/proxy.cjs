@@ -96,6 +96,7 @@ app.listen(PORT, () => {
   console.log('  - /api/headlines');
   console.log('  - /api/tech');
   console.log('  - /api/lemmy');
+  console.log('  - /api/open-social');
   console.log('  - /api/hackernews');
   console.log('  - /api/4chan');
   console.log('  - /api/weather');

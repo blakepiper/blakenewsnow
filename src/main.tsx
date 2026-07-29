@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
-import ReactDOM from 'react-dom';
-import { CssBaseline, StylesProvider, ThemeProvider } from '@material-ui/core';
+import { createRoot } from 'react-dom/client';
+import { CssBaseline, ThemeProvider } from '@mui/material';
 import './index.css';
 import App from './App.tsx';
 import { theme } from './theme';
@@ -52,14 +52,14 @@ if ('serviceWorker' in navigator) {
   }
 }
 
-ReactDOM.render(
+const rootElement = document.getElementById('root');
+if (!rootElement) throw new Error('Unable to find the application root.');
+
+createRoot(rootElement).render(
   <StrictMode>
-    <StylesProvider injectFirst>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <App />
-      </ThemeProvider>
-    </StylesProvider>
-  </StrictMode>,
-  document.getElementById('root'),
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <App />
+    </ThemeProvider>
+  </StrictMode>
 );

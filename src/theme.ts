@@ -1,4 +1,4 @@
-import { createMuiTheme } from '@material-ui/core/styles';
+import { createTheme } from '@mui/material/styles';
 
 const interfaceFont = [
   '-apple-system',
@@ -10,9 +10,9 @@ const interfaceFont = [
   'sans-serif',
 ].join(',');
 
-export const theme = createMuiTheme({
+export const theme = createTheme({
   palette: {
-    type: 'dark',
+    mode: 'dark',
     primary: {
       main: '#6f9fc5',
       light: '#9ac1df',
@@ -45,28 +45,34 @@ export const theme = createMuiTheme({
       textTransform: 'none',
     },
   },
-  props: {
+  components: {
     MuiButtonBase: {
-      disableRipple: true,
+      defaultProps: {
+        disableRipple: true,
+      },
     },
-  },
-  overrides: {
     MuiTooltip: {
-      tooltip: {
-        backgroundColor: '#252a2f',
-        border: '1px solid rgba(225, 235, 242, 0.12)',
-        color: '#e8edf1',
-        fontSize: '0.6875rem',
+      styleOverrides: {
+        tooltip: {
+          backgroundColor: '#252a2f',
+          border: '1px solid rgba(225, 235, 242, 0.12)',
+          color: '#e8edf1',
+          fontSize: '0.6875rem',
+        },
       },
     },
     MuiButton: {
-      root: {
-        minWidth: 0,
+      styleOverrides: {
+        root: {
+          minWidth: 0,
+        },
       },
     },
     MuiInputBase: {
-      root: {
-        fontSize: '0.8125rem',
+      styleOverrides: {
+        root: {
+          fontSize: '0.8125rem',
+        },
       },
     },
   },

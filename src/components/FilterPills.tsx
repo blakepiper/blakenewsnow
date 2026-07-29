@@ -1,6 +1,6 @@
-import { Tab, Tabs } from '@material-ui/core';
-import { makeStyles } from '@material-ui/core/styles';
-import type { ChangeEvent } from 'react';
+import { Tab, Tabs } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import type { SyntheticEvent } from 'react';
 
 export type FilterType = 'all' | 'news' | 'tech' | 'social';
 
@@ -16,62 +16,56 @@ const filters: { id: FilterType; label: string }[] = [
   { id: 'social', label: 'Social' },
 ];
 
-const useStyles = makeStyles(theme => ({
-  root: {
-    minHeight: 32,
-    padding: '0 4px',
-  },
-  indicator: {
+const FilterTabs = styled(Tabs)(({ theme }) => ({
+  minHeight: 32,
+  padding: '0 4px',
+  '& .MuiTabs-indicator': {
     height: 2,
     backgroundColor: theme.palette.primary.main,
   },
-  tab: {
-    minWidth: 52,
-    minHeight: 32,
-    padding: '4px 9px',
-    color: theme.palette.text.secondary,
-    fontSize: 11,
-    opacity: 1,
-    '&:hover': {
-      color: theme.palette.text.primary,
-      backgroundColor: 'rgba(225, 235, 242, 0.05)',
-    },
-    '&:active': {
-      transform: 'translateY(1px)',
-    },
-    '&$selected': {
-      color: theme.palette.text.primary,
-    },
-    '@media (max-width: 767px)': {
-      minWidth: 68,
-      minHeight: 38,
-      padding: '7px 13px',
-      fontSize: 12,
-    },
+}));
+
+const FilterTab = styled(Tab)(({ theme }) => ({
+  minWidth: 52,
+  minHeight: 32,
+  padding: '4px 9px',
+  color: theme.palette.text.secondary,
+  fontSize: 11,
+  opacity: 1,
+  '&:hover': {
+    color: theme.palette.text.primary,
+    backgroundColor: 'rgba(225, 235, 242, 0.05)',
   },
-  selected: {},
+  '&:active': {
+    transform: 'translateY(1px)',
+  },
+  '&.Mui-selected': {
+    color: theme.palette.text.primary,
+  },
+  '@media (max-width: 767px)': {
+    minWidth: 68,
+    minHeight: 38,
+    padding: '7px 13px',
+    fontSize: 12,
+  },
 }));
 
 export function FilterPills({ activeFilter, onFilterChange }: FilterPillsProps) {
-  const classes = useStyles();
-
   return (
-    <Tabs
+    <FilterTabs
       value={activeFilter}
-      onChange={(_: ChangeEvent<Record<string, never>>, value: FilterType) => onFilterChange(value)}
+      onChange={(_: SyntheticEvent, value: FilterType) => onFilterChange(value)}
       variant="scrollable"
-      scrollButtons="off"
+      scrollButtons={false}
       aria-label="Filter news feed"
-      classes={{ root: classes.root, indicator: classes.indicator }}
     >
       {filters.map(filter => (
-        <Tab
+        <FilterTab
           key={filter.id}
           value={filter.id}
-          classes={{ root: classes.tab, selected: classes.selected }}
           label={filter.label}
         />
       ))}
-    </Tabs>
+    </FilterTabs>
   );
 }

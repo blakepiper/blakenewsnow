@@ -56,6 +56,8 @@ export function getSourceColor(source: string): string {
     '/news/': 'bg-green-700',
     '/pol/': 'bg-amber-700',
     '/lit/': 'bg-fuchsia-700',
+    'Bluesky Discover': 'bg-sky-600',
+    'Mastodon Trending': 'bg-violet-600',
   };
   if (source.startsWith('c/')) return 'bg-emerald-600';
   return colors[source] || 'bg-gray-500';
@@ -78,6 +80,7 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'social' {
   if (techSources.includes(source)) return 'tech';
   if (source.startsWith('c/')) return 'social';
   if (source.startsWith('/') && source.endsWith('/')) return 'social';
+  if (['Bluesky Discover', 'Mastodon Trending'].includes(source)) return 'social';
   return 'news';
 }
 

@@ -1,13 +1,9 @@
-import { useState, useCallback, useMemo } from 'react';
+import { lazy, Suspense, useState, useCallback, useMemo } from 'react';
 import {
   Weather,
   Financial,
   Predictions,
   Ticker,
-  KeyboardHelp,
-  SearchBar,
-  Settings,
-  ArticlePreview,
 } from './components';
 import type { FilterType } from './components';
 import { Header } from './components/Header';
@@ -19,6 +15,19 @@ import { useSettings, useKeyboard } from './hooks';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
 import type { FeedItem, MobileView } from './types';
 import './App.css';
+
+const KeyboardHelp = lazy(() => import('./components/KeyboardHelp').then(module => ({
+  default: module.KeyboardHelp,
+})));
+const SearchBar = lazy(() => import('./components/SearchBar').then(module => ({
+  default: module.SearchBar,
+})));
+const Settings = lazy(() => import('./components/Settings').then(module => ({
+  default: module.Settings,
+})));
+const ArticlePreview = lazy(() => import('./components/ArticlePreview').then(module => ({
+  default: module.ArticlePreview,
+})));
 
 function App() {
   const {
@@ -257,33 +266,43 @@ function App() {
 
       {/* Modals */}
       {showKeyboardHelp && (
-        <KeyboardHelp onClose={() => setShowKeyboardHelp(false)} />
+        <Suspense fallback={null}>
+          <KeyboardHelp onClose={() => setShowKeyboardHelp(false)} />
+        </Suspense>
       )}
 
       {showSearch && (
-        <SearchBar
-          headlines={allHeadlines}
-          onSelect={handleSelectFromSearch}
-          onClose={() => setShowSearch(false)}
-          isOpen={showSearch}
-        />
+        <Suspense fallback={null}>
+          <SearchBar
+            headlines={allHeadlines}
+            onSelect={handleSelectFromSearch}
+            onClose={() => setShowSearch(false)}
+            isOpen={showSearch}
+          />
+        </Suspense>
       )}
 
       {showSettings && (
-        <Settings
-          settings={settings}
-          onClose={() => setShowSettings(false)}
-          onToggleSource={toggleSource}
-          onSetAllSources={setAllSources}
-          onUpdateLocation={updateLocation}
-        />
+        <Suspense fallback={null}>
+          <Settings
+            settings={settings}
+            onClose={() => setShowSettings(false)}
+            onToggleSource={toggleSource}
+            onSetAllSources={setAllSources}
+            onUpdateLocation={updateLocation}
+          />
+        </Suspense>
       )}
 
-      <ArticlePreview
-        item={previewItem}
-        alternatives={briefingItems}
-        onClose={() => setPreviewItem(null)}
-      />
+      {previewItem && (
+        <Suspense fallback={null}>
+          <ArticlePreview
+            item={previewItem}
+            alternatives={briefingItems}
+            onClose={() => setPreviewItem(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

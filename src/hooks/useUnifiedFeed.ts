@@ -90,10 +90,11 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
       const headlineParams = new URLSearchParams({
         sources: [...enabledSources].sort().join(','),
       });
-      const [headlinesRes, techRes, lemmyRes, hnRes, chanRes] = await Promise.all([
+      const [headlinesRes, techRes, lemmyRes, openSocialRes, hnRes, chanRes] = await Promise.all([
         fetch(`${API_BASE}/api/headlines?${headlineParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/tech`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/lemmy`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/open-social`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/hackernews`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/4chan`).then(r => r.ok ? r.json() : []).catch(() => []),
       ]);
@@ -130,6 +131,23 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
 
       // Normalize federated social news
       (lemmyRes as RawSocialPost[]).forEach((post) => {
+        feedItems.push({
+          id: post.id,
+          title: post.title,
+          source: post.source,
+          sourceType: 'social',
+          category: post.source,
+          timestamp: post.timestamp,
+          link: post.url || post.permalink,
+          score: post.score,
+          comments: post.comments,
+          community: post.community,
+          description: post.description,
+        });
+      });
+
+      // Normalize credential-free Bluesky and Mastodon signals
+      (openSocialRes as RawSocialPost[]).forEach((post) => {
         feedItems.push({
           id: post.id,
           title: post.title,
