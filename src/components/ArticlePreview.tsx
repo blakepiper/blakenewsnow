@@ -288,6 +288,7 @@ const RecommendationAction = styled('span')(({ theme }) => ({
 export function ArticlePreview({ item, alternatives, onClose }: ArticlePreviewProps) {
   const isMobile = useMediaQuery('(max-width: 767px)');
   const readerContentRef = useRef<HTMLDivElement>(null);
+  const alternativesRef = useRef(alternatives);
   const [preview, setPreview] = useState<ArticlePreviewDocument | null>(null);
   const [readerItem, setReaderItem] = useState<FeedItem | null>(null);
   const [matchTerms, setMatchTerms] = useState<string[]>([]);
@@ -296,6 +297,10 @@ export function ArticlePreview({ item, alternatives, onClose }: ArticlePreviewPr
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
+
+  useEffect(() => {
+    alternativesRef.current = alternatives;
+  }, [alternatives]);
 
   useEffect(() => {
     if (!item) {
@@ -357,7 +362,7 @@ export function ArticlePreview({ item, alternatives, onClose }: ArticlePreviewPr
 
       const relatedArticle = await findReadableArticleRecommendation(
         item,
-        alternatives,
+        alternativesRef.current,
         fetchPreview
       );
       if (controller.signal.aborted) return;
@@ -377,7 +382,7 @@ export function ArticlePreview({ item, alternatives, onClose }: ArticlePreviewPr
       });
 
     return () => controller.abort();
-  }, [item, alternatives]);
+  }, [item]);
 
   const openOriginal = () => {
     if (item?.link) window.open(item.link, '_blank', 'noopener,noreferrer');
