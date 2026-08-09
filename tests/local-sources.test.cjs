@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { RSS_FEEDS, selectLocalItems } = require('../server/data-feeds.cjs');
+const { isWtopBettingPromotion, RSS_FEEDS, selectLocalItems } = require('../server/data-feeds.cjs');
 
 test('configures free DC and Alexandria local sources', () => {
   const feeds = RSS_FEEDS.local;
@@ -20,4 +20,19 @@ test('applies local source selection before the response limit', () => {
     selectLocalItems(items, new Set(['Alexandria Times'])),
     [{ source: 'Alexandria Times', id: 'alexandria-1' }]
   );
+});
+
+test('filters WTOP betting and prediction-market promotions while keeping local reporting', () => {
+  assert.equal(isWtopBettingPromotion({
+    title: 'BetMGM Bonus Code TOP1500: Get $1,500 Bonus for MLB Games',
+    description: 'This article contains references to products from our advertisers or partners.',
+  }), true);
+  assert.equal(isWtopBettingPromotion({
+    title: 'Virginia lawmakers debate sports betting regulations',
+    description: 'The proposal would change how licensed operators report revenue.',
+  }), false);
+  assert.equal(isWtopBettingPromotion({
+    title: 'DC prediction market policy draws scrutiny',
+    description: 'Officials are reviewing the legal questions around the market.',
+  }), false);
 });

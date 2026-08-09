@@ -35,6 +35,14 @@ function selectDiverseItems(items, limit, perSourceCap) {
   return selected.slice(0, limit);
 }
 
+const WTOP_BETTING_TERMS = /\b(?:betmgm|draftkings|fanduel|bet365|caesars sportsbook|fanatics sportsbook|sportsbook|sports betting|prediction markets?|casino|parlay|wager|betting odds|jackpot)\b/i;
+const WTOP_PROMOTION_MARKERS = /\b(?:bonus code|promo code|bonus bets?|promo bets?|sign[- ]?up bonus|exclusive offer|advertis(?:er|ing)|sponsored|affiliate|products from our advertisers|partners?)\b/i;
+
+function isWtopBettingPromotion(item) {
+  const text = `${item?.title || ''} ${item?.description || ''}`;
+  return WTOP_BETTING_TERMS.test(text) && WTOP_PROMOTION_MARKERS.test(text);
+}
+
 // ============================================
 // RSS Feed Configuration
 // ============================================
@@ -214,7 +222,7 @@ const RSS_FEEDS = {
     { name: 'USGS Earthquakes', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.atom' },
   ],
   local: [
-    { name: 'WTOP', url: 'https://wtop.com/feed/' },
+    { name: 'WTOP', url: 'https://wtop.com/feed/', filter: item => !isWtopBettingPromotion(item) },
     { name: 'WAMU', url: 'https://wamu.org/feed/' },
     { name: 'Alexandria City', url: 'https://www.alexandriava.gov/News', parser: 'alexandria-html', maxAgeMs: 30 * 24 * 60 * 60 * 1000 },
     { name: 'Alexandria Times', url: 'https://alextimes.com/feed/' },
@@ -2379,4 +2387,5 @@ module.exports = {
   fetchFourChan,
   fetchTechNews,
   fetchScienceNews,
+  isWtopBettingPromotion,
 };

@@ -32,6 +32,7 @@ The application is self-hosted and credential-free by default. Its **What's Happ
 - **Source controls** — individual publishers and communities can be enabled or disabled from settings, with select-all and unselect-all actions.
 - **Dedicated science feed** — a separate Science tab combines current science journalism with articles from leading multidisciplinary and medical journals.
 - **Dedicated local feed** — a separate Local tab covers Washington, DC and Alexandria through local publishers, public radio, city news, and Virginia reporting.
+- **Local promotion filtering** — WTOP betting, sportsbook, casino, and prediction-market promotions are removed before local stories are displayed.
 - **Open social signals** — integrates Lemmy, Bluesky Discover, Mastodon trending links, Hacker News, and selected 4chan boards without application credentials.
 - **User RSS/Atom feeds** — add any public feed from Settings; the server rejects private hosts, credentials, and non-HTTP(S) URLs.
 - **Live context panels** — weather radar, financial markets, cryptocurrency, prediction markets, ticker data, and an interactive geographic globe.
