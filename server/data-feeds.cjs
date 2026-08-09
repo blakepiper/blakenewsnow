@@ -35,13 +35,23 @@ function selectDiverseItems(items, limit, perSourceCap) {
   return selected.slice(0, limit);
 }
 
-const WTOP_BETTING_TERMS = /\b(?:betmgm|draftkings|fanduel|bet365|caesars sportsbook|fanatics sportsbook|sportsbook|sports betting|prediction markets?|casino|parlay|wager|betting odds|jackpot)\b/i;
-const WTOP_PROMOTION_MARKERS = /\b(?:bonus code|promo code|bonus bets?|promo bets?|sign[- ]?up bonus|exclusive offer|advertis(?:er|ing)|sponsored|affiliate|products from our advertisers|partners?)\b/i;
+const LOCAL_BETTING_TERMS = /\b(?:betmgm|prophetx|kalshi|polymarket|draftkings|fanduel|bet365|caesars(?: sportsbook)?|fanatics sportsbook|sportsbook|sports betting|prediction markets?|betting odds|parlay|wager|jackpot)\b/i;
+const LOCAL_ADULT_TERMS = /\b(?:cam sites?|camgirls?|webcam models?|adult (?:sites?|content|entertainment)|porn(?:ographic)?|onlyfans|xxx sites?|live sex|trans cams?)\b/i;
+const LOCAL_PROMOTION_MARKERS = /\b(?:promo(?:tion)? code|bonus code|bonus bets?|promo bets?|sign[- ]?up bonus|exclusive offer|advertis(?:er|ing)|sponsored(?: content)?|affiliate|products from our advertisers|partners?|coupon|discount code|free spins|claim(?:ing)? \$?[\d,]+|get \$?[\d,]+)\b/i;
+const LOCAL_COMMERCIAL_LISTICLE = /\b(?:top|best)\s+\d+\b[\s\S]{0,80}\b(?:sites?|platforms?|services?|apps?|products?)\b/i;
 
-function isWtopBettingPromotion(item) {
-  const text = `${item?.title || ''} ${item?.description || ''}`;
-  return WTOP_BETTING_TERMS.test(text) && WTOP_PROMOTION_MARKERS.test(text);
+function isLocalAdOrPromotion(item) {
+  const title = String(item?.title || '');
+  const description = String(item?.description || '');
+  const text = `${title} ${description}`;
+
+  if (LOCAL_ADULT_TERMS.test(text) || LOCAL_COMMERCIAL_LISTICLE.test(title)) return true;
+  if (/\b(?:sponsored(?: content)?|affiliate|advertiser(?:s)?|products from our advertisers|our partners?)\b/i.test(text)) return true;
+  if (LOCAL_PROMOTION_MARKERS.test(text)) return true;
+  return LOCAL_BETTING_TERMS.test(title) && /\b(?:code|bonus|offer|promo|claim|get)\b/i.test(title);
 }
+
+const localFeedFilter = item => !isLocalAdOrPromotion(item);
 
 // ============================================
 // RSS Feed Configuration
@@ -222,16 +232,16 @@ const RSS_FEEDS = {
     { name: 'USGS Earthquakes', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.atom' },
   ],
   local: [
-    { name: 'WTOP', url: 'https://wtop.com/feed/', filter: item => !isWtopBettingPromotion(item) },
-    { name: 'WAMU', url: 'https://wamu.org/feed/' },
-    { name: 'Alexandria City', url: 'https://www.alexandriava.gov/News', parser: 'alexandria-html', maxAgeMs: 30 * 24 * 60 * 60 * 1000 },
-    { name: 'Alexandria Times', url: 'https://alextimes.com/feed/' },
-    { name: 'ALXnow', url: 'https://www.alxnow.com/feed/' },
-    { name: 'Virginia Mercury', url: 'https://www.virginiamercury.com/feed/' },
-    { name: 'Washington Post Local', url: 'https://feeds.washingtonpost.com/rss/local' },
-    { name: 'DC News Now', url: 'https://www.dcnewsnow.com/feed/' },
-    { name: 'Washington City Paper', url: 'https://washingtoncitypaper.com/feed/' },
-    { name: 'Washington Blade', url: 'https://www.washingtonblade.com/feed/' },
+    { name: 'WTOP', url: 'https://wtop.com/feed/', filter: localFeedFilter },
+    { name: 'WAMU', url: 'https://wamu.org/feed/', filter: localFeedFilter },
+    { name: 'Alexandria City', url: 'https://www.alexandriava.gov/News', parser: 'alexandria-html', maxAgeMs: 30 * 24 * 60 * 60 * 1000, filter: localFeedFilter },
+    { name: 'Alexandria Times', url: 'https://alextimes.com/feed/', filter: localFeedFilter },
+    { name: 'ALXnow', url: 'https://www.alxnow.com/feed/', filter: localFeedFilter },
+    { name: 'Virginia Mercury', url: 'https://www.virginiamercury.com/feed/', filter: localFeedFilter },
+    { name: 'Washington Post Local', url: 'https://feeds.washingtonpost.com/rss/local', filter: localFeedFilter },
+    { name: 'DC News Now', url: 'https://www.dcnewsnow.com/feed/', filter: localFeedFilter },
+    { name: 'Washington City Paper', url: 'https://washingtoncitypaper.com/feed/', filter: localFeedFilter },
+    { name: 'Washington Blade', url: 'https://www.washingtonblade.com/feed/', filter: localFeedFilter },
   ],
   ticker: [
     { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml' },
@@ -2387,5 +2397,5 @@ module.exports = {
   fetchFourChan,
   fetchTechNews,
   fetchScienceNews,
-  isWtopBettingPromotion,
+  isLocalAdOrPromotion,
 };
