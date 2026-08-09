@@ -34,6 +34,8 @@ function App() {
     settings,
     toggleSource,
     setAllSources,
+    addCustomFeed,
+    removeCustomFeed,
     updateLocation,
     markAsRead,
     toggleSection,
@@ -52,13 +54,21 @@ function App() {
   // Unified feed
   const enabledSources = useMemo(
     () => new Set(
-      settings.sources
+      [...settings.sources, ...settings.customFeeds]
         .filter(source => source.enabled)
         .flatMap(source => source.apiSources || [source.name])
     ),
-    [settings.sources]
+    [settings.sources, settings.customFeeds]
   );
-  const { items, briefingItems, loading, error, newItemIds, refresh } = useUnifiedFeed(enabledSources);
+  const customFeeds = useMemo(
+    () => settings.customFeeds.flatMap(feed => (
+      feed.enabled && feed.name && feed.url
+        ? [{ name: feed.name, url: feed.url }]
+        : []
+    )),
+    [settings.customFeeds]
+  );
+  const { items, briefingItems, loading, error, newItemIds, refresh } = useUnifiedFeed(enabledSources, customFeeds);
 
   // Filter items for search (flat list for search compatibility)
   const allHeadlines = items.map(item => ({
@@ -125,6 +135,7 @@ function App() {
     else if (section === 3) setActiveFilter('tech');
     else if (section === 4) setActiveFilter('social');
     else if (section === 5) setActiveFilter('science');
+    else if (section === 6) setActiveFilter('local');
   }, []);
 
   const handleSettings = useCallback(() => {
@@ -290,6 +301,8 @@ function App() {
             onClose={() => setShowSettings(false)}
             onToggleSource={toggleSource}
             onSetAllSources={setAllSources}
+            onAddCustomFeed={addCustomFeed}
+            onRemoveCustomFeed={removeCustomFeed}
             onUpdateLocation={updateLocation}
           />
         </Suspense>

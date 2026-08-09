@@ -31,7 +31,9 @@ The application is self-hosted and credential-free by default. Its **What's Happ
 - **Verified full-text alternatives** — when a publisher exposes only an excerpt, local topic similarity finds related reporting and offers a link only after the reader verifies that the alternative has full text. The reader switches sources only when clicked and preserves both links.
 - **Source controls** — individual publishers and communities can be enabled or disabled from settings, with select-all and unselect-all actions.
 - **Dedicated science feed** — a separate Science tab combines current science journalism with articles from leading multidisciplinary and medical journals.
+- **Dedicated local feed** — a separate Local tab covers Washington, DC and Alexandria through local publishers, public radio, city news, and Virginia reporting.
 - **Open social signals** — integrates Lemmy, Bluesky Discover, Mastodon trending links, Hacker News, and selected 4chan boards without application credentials.
+- **User RSS/Atom feeds** — add any public feed from Settings; the server rejects private hosts, credentials, and non-HTTP(S) URLs.
 - **Live context panels** — weather radar, financial markets, cryptocurrency, prediction markets, ticker data, and an interactive geographic globe.
 - **Dense interaction model** — keyboard navigation, search, responsive layouts, and persistent draggable pane sizes.
 
@@ -53,7 +55,7 @@ npm start
 
 Open [http://localhost:3000](http://localhost:3000). The Vite frontend runs on port `3000` and the Express API runs on port `3001`.
 
-No API keys are required for the currently configured integrations.
+No API keys or paid services are required for the currently configured integrations. Public endpoints may still impose their own rate limits or availability rules.
 
 ## Configuration
 
@@ -91,7 +93,7 @@ The server and client apply complementary validation:
 
 1. Fetch configured feeds concurrently and coalesce simultaneous requests.
 2. Parse RSS, Atom, and RDF feeds, including namespaced dates and alternate links.
-3. Reject invalid URLs, missing or invalid dates, future timestamps, and entries older than seven days.
+3. Reject invalid URLs, missing or invalid dates, future timestamps, and entries older than the source's freshness window. Most sources use seven days; slower official and journal feeds use a longer source-specific window.
 4. Infer dates only from recognized date-bearing article URL patterns when a feed omits them.
 5. Normalize titles and remove repeated or substantially matching entries.
 6. Balance publishers before filling remaining capacity so one high-volume source cannot dominate.
@@ -104,16 +106,18 @@ The reader is deliberately separate from the publisher page. It only returns ext
 
 | Category | Sources |
 |---|---|
-| General news | NPR, BBC, CBC News, DW, The Guardian, Al Jazeera, ABC News, CBS News, The New York Times, Bloomberg, Financial Times, The Wall Street Journal, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart |
-| Technology | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters, MIT Technology Review, BleepingComputer, Rest of World, The Register, 404 Media |
-| Science news | ScienceDaily, Phys.org, Science News, Live Science, Quanta Magazine, NASA, AAAS Science News, APS Psychology, Neuroscience News Psychology |
+| General news | NPR, BBC, CBC News, DW, The Guardian, Al Jazeera, ABC News, CBS News, The New York Times, Bloomberg, Financial Times, The Wall Street Journal, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart, GDELT, RFI, The Hindu, Indian Express, SCMP, El Pais, Euronews, The New Humanitarian, African Arguments, The Conversation |
+| Official and verification | White House, Defense.gov, Congress.gov, CISA, NOAA, SEC, Federal Reserve, BLS, EIA, FDA Press Releases, FDA Recalls, CDC Travel Notices, FactCheck.org, Snopes, ICIJ, Bellingcat |
+| Technology | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters, MIT Technology Review, BleepingComputer, Rest of World, The Register, 404 Media, KrebsOnSecurity, Dark Reading, IEEE Spectrum, The Markup, GitHub Engineering, GitHub Security, OpenAI News, Google AI, AWS News, Cloudflare |
+| Science news | ScienceDaily, Phys.org, Science News, Live Science, Quanta Magazine, NASA, AAAS Science News, APS Psychology, Neuroscience News Psychology, Carbon Brief, Mongabay, STAT, WHO, Undark, USGS Earthquakes |
 | Scientific journals | Nature, Science, PNAS, Cell, Science Advances, eLife, PLOS ONE, The Lancet, NEJM, Frontiers in Psychology, Human Factors, Ergonomics |
+| Local — DC and Alexandria | WTOP, WAMU, Alexandria City, Alexandria Times, ALXnow, Virginia Mercury, Washington Post Local, DC News Now, Washington City Paper, Washington Blade |
 | Social | Lemmy communities, Bluesky Discover, Mastodon trending links, 4chan `/news/`, `/pol/`, and `/lit/` |
-| Markets | Yahoo Finance, CoinGecko |
-| Predictions | Polymarket, pizzint.watch |
+| Markets and macro | Yahoo Finance, CoinGecko, FRED |
+| Predictions | Polymarket, Kalshi, pizzint.watch |
 | Weather | National Weather Service, RainViewer |
 
-Upstream availability and response formats can change without notice. Run `npm run audit:sources` when diagnosing missing or stale content.
+All configured news sources use public RSS, Atom, HTML, or anonymous public endpoints. AP, Reuters, and Metaculus are not enabled as direct sources because their official machine-access paths require authentication; the app uses free public alternatives instead. Upstream availability and response formats can change without notice. Run `npm run audit:sources` when diagnosing missing or stale content.
 
 ## Keyboard shortcuts
 
@@ -125,7 +129,7 @@ Upstream availability and response formats can change without notice. Run `npm r
 | `/` | Open search |
 | `?` | Show keyboard shortcuts |
 | `Ctrl+,` | Open settings |
-| `1`–`5` | Change the active feed filter |
+| `1`–`6` | Change the active feed filter |
 | `Esc` | Close the active dialog |
 
 ## Architecture

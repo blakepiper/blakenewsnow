@@ -12,6 +12,11 @@ interface RawHeadline {
   description?: string;
 }
 
+interface CustomFeedDefinition {
+  name: string;
+  url: string;
+}
+
 interface RawSocialPost {
   id: string;
   title: string;
@@ -74,7 +79,10 @@ function getDomain(url: string): string {
 
 const MAX_FEED_ITEM_AGE = 7 * 24 * 60 * 60 * 1000;
 
-export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
+export function useUnifiedFeed(
+  enabledSources: ReadonlySet<string>,
+  customFeeds: readonly CustomFeedDefinition[] = []
+) {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [briefingItems, setBriefingItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,10 +98,15 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
       const sourceParams = new URLSearchParams({
         sources: [...enabledSources].sort().join(','),
       });
-      const [headlinesRes, techRes, scienceRes, lemmyRes, openSocialRes, hnRes, chanRes] = await Promise.all([
+      const customParams = new URLSearchParams({
+        feeds: JSON.stringify(customFeeds),
+      });
+      const [headlinesRes, techRes, scienceRes, localRes, customRes, lemmyRes, openSocialRes, hnRes, chanRes] = await Promise.all([
         fetch(`${API_BASE}/api/headlines?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/tech`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/science?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/local?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/custom?${customParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/lemmy`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/open-social`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/hackernews`).then(r => r.ok ? r.json() : []).catch(() => []),
@@ -137,6 +150,34 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
           title: h.title,
           source: h.source,
           sourceType: 'science',
+          category: h.source,
+          timestamp: h.timestamp,
+          link: h.link || '',
+          description: h.description,
+        });
+      });
+
+      // Normalize DC and Alexandria local news
+      (localRes as RawHeadline[]).forEach((h) => {
+        feedItems.push({
+          id: h.id,
+          title: h.title,
+          source: h.source,
+          sourceType: 'local',
+          category: h.source,
+          timestamp: h.timestamp,
+          link: h.link || '',
+          description: h.description,
+        });
+      });
+
+      // Normalize user-provided public RSS/Atom feeds
+      (customRes as RawHeadline[]).forEach((h) => {
+        feedItems.push({
+          id: h.id,
+          title: h.title,
+          source: h.source,
+          sourceType: 'news',
           category: h.source,
           timestamp: h.timestamp,
           link: h.link || '',
@@ -225,7 +266,8 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
       // Deduplicate across sources
       const deduped: FeedItem[] = [];
       for (const item of validItems) {
-        const isDuplicate = deduped.some(existing => titlesMatch(existing.title, item.title));
+        const isDuplicate = item.sourceType !== 'local'
+          && deduped.some(existing => existing.sourceType !== 'local' && titlesMatch(existing.title, item.title));
         if (!isDuplicate) {
           deduped.push(item);
         }
@@ -268,7 +310,7 @@ export function useUnifiedFeed(enabledSources: ReadonlySet<string>) {
         setLoading(false);
       }
     }
-  }, [enabledSources]);
+  }, [customFeeds, enabledSources]);
 
   useEffect(() => {
     fetchAll();

@@ -53,6 +53,47 @@ export function getSourceColor(source: string): string {
     'ProPublica': 'bg-yellow-600',
     'Foreign Policy': 'bg-teal-600',
     'Breitbart': 'bg-orange-700',
+    'GDELT': 'bg-slate-500',
+    'France 24': 'bg-blue-500',
+    'RFI': 'bg-red-500',
+    'VOA Africa': 'bg-blue-600',
+    'VOA East Asia': 'bg-cyan-600',
+    'VOA China': 'bg-red-600',
+    'VOA Worldwide in Five': 'bg-indigo-600',
+    'The Hindu': 'bg-orange-500',
+    'Indian Express': 'bg-amber-600',
+    'SCMP': 'bg-red-700',
+    'El Pais': 'bg-slate-600',
+    'Euronews': 'bg-blue-700',
+    'The New Humanitarian': 'bg-orange-600',
+    'African Arguments': 'bg-emerald-700',
+    'The Conversation': 'bg-teal-600',
+    'White House': 'bg-blue-700',
+    'Defense.gov': 'bg-green-700',
+    'Congress.gov': 'bg-indigo-700',
+    'CISA': 'bg-cyan-700',
+    'NOAA': 'bg-sky-700',
+    'SEC': 'bg-violet-700',
+    'Federal Reserve': 'bg-emerald-700',
+    'BLS': 'bg-teal-700',
+    'EIA': 'bg-yellow-700',
+    'FDA Press Releases': 'bg-pink-700',
+    'FDA Recalls': 'bg-rose-700',
+    'CDC Travel Notices': 'bg-green-700',
+    'FactCheck.org': 'bg-lime-700',
+    'Snopes': 'bg-purple-700',
+    'ICIJ': 'bg-amber-700',
+    'Bellingcat': 'bg-fuchsia-700',
+    'KrebsOnSecurity': 'bg-red-700',
+    'Dark Reading': 'bg-orange-600',
+    'IEEE Spectrum': 'bg-blue-600',
+    'The Markup': 'bg-green-700',
+    'GitHub Engineering': 'bg-gray-700',
+    'GitHub Security': 'bg-gray-600',
+    'OpenAI News': 'bg-emerald-600',
+    'Google AI': 'bg-blue-600',
+    'AWS News': 'bg-orange-600',
+    'Cloudflare': 'bg-orange-700',
     '/news/': 'bg-green-700',
     '/pol/': 'bg-amber-700',
     '/lit/': 'bg-fuchsia-700',
@@ -79,12 +120,28 @@ export function getSourceColor(source: string): string {
     'Frontiers in Psychology': 'bg-indigo-600',
     'Human Factors': 'bg-teal-600',
     'Ergonomics': 'bg-emerald-700',
+    'Carbon Brief': 'bg-green-600',
+    'Mongabay': 'bg-lime-700',
+    'STAT': 'bg-pink-600',
+    'WHO': 'bg-blue-600',
+    'Undark': 'bg-slate-600',
+    'USGS Earthquakes': 'bg-yellow-700',
+    'WTOP': 'bg-blue-700',
+    'WAMU': 'bg-purple-700',
+    'Alexandria City': 'bg-cyan-700',
+    'Alexandria Times': 'bg-red-700',
+    'ALXnow': 'bg-orange-700',
+    'Virginia Mercury': 'bg-amber-700',
+    'Washington Post Local': 'bg-slate-500',
+    'DC News Now': 'bg-indigo-700',
+    'Washington City Paper': 'bg-rose-700',
+    'Washington Blade': 'bg-pink-700',
   };
   if (source.startsWith('c/')) return 'bg-emerald-600';
   return colors[source] || 'bg-gray-500';
 }
 
-export function getSourceCategory(source: string): 'news' | 'tech' | 'science' | 'social' {
+export function getSourceCategory(source: string): 'news' | 'tech' | 'science' | 'social' | 'local' {
   const techSources = [
     'Hacker News',
     'Ars Technica',
@@ -97,6 +154,16 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'science' |
     'Rest of World',
     'The Register',
     '404 Media',
+    'KrebsOnSecurity',
+    'Dark Reading',
+    'IEEE Spectrum',
+    'The Markup',
+    'GitHub Engineering',
+    'GitHub Security',
+    'OpenAI News',
+    'Google AI',
+    'AWS News',
+    'Cloudflare',
   ];
   const scienceSources = [
     'ScienceDaily',
@@ -120,21 +187,41 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'science' |
     'Frontiers in Psychology',
     'Human Factors',
     'Ergonomics',
+    'Carbon Brief',
+    'Mongabay',
+    'STAT',
+    'WHO',
+    'Undark',
+    'USGS Earthquakes',
+  ];
+  const localSources = [
+    'WTOP',
+    'WAMU',
+    'Alexandria City',
+    'Alexandria Times',
+    'ALXnow',
+    'Virginia Mercury',
+    'Washington Post Local',
+    'DC News Now',
+    'Washington City Paper',
+    'Washington Blade',
   ];
   if (techSources.includes(source)) return 'tech';
   if (scienceSources.includes(source)) return 'science';
+  if (localSources.includes(source)) return 'local';
   if (source.startsWith('c/')) return 'social';
   if (source.startsWith('/') && source.endsWith('/')) return 'social';
   if (['Bluesky Discover', 'Mastodon Trending'].includes(source)) return 'social';
   return 'news';
 }
 
-export function getCategoryDotColor(sourceType: 'news' | 'tech' | 'science' | 'social'): string {
+export function getCategoryDotColor(sourceType: 'news' | 'tech' | 'science' | 'social' | 'local'): string {
   switch (sourceType) {
     case 'news': return 'bg-blue-400';
     case 'tech': return 'bg-purple-400';
     case 'science': return 'bg-emerald-400';
     case 'social': return 'bg-orange-400';
+    case 'local': return 'bg-cyan-400';
   }
 }
 

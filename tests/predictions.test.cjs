@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { normalizePolymarketMarket } = require('../server/data-feeds.cjs');
+const { normalizeKalshiMarket, normalizePolymarketMarket } = require('../server/data-feeds.cjs');
 
 const NOW = new Date('2026-07-29T16:00:00Z').getTime();
 
@@ -51,4 +51,20 @@ test('rejects ended, malformed, and sports markets independently', () => {
     normalizePolymarketMarket(market({ question: 'Will the Lakers win the NBA championship?' }), NOW),
     null
   );
+});
+
+test('normalizes an anonymous Kalshi market without requiring credentials', () => {
+  const result = normalizeKalshiMarket({
+    ticker: 'KXEXAMPLE-26',
+    event_ticker: 'KXEXAMPLE',
+    title: 'Will the example happen before 2027?',
+    status: 'active',
+    volume_24h_fp: '25000',
+    last_price_dollars: '0.64',
+    close_time: '2026-12-31T23:59:00Z',
+  }, NOW);
+
+  assert.equal(result.source, 'Kalshi');
+  assert.equal(result.yesPrice, 64);
+  assert.equal(result.url, 'https://kalshi.com/markets/KXEXAMPLE/KXEXAMPLE-26');
 });

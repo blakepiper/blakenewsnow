@@ -24,6 +24,8 @@ interface SettingsProps {
   onClose: () => void;
   onToggleSource: (sourceId: string) => void;
   onSetAllSources: (enabled: boolean) => void;
+  onAddCustomFeed: (name: string, url: string) => void;
+  onRemoveCustomFeed: (feedId: string) => void;
   onUpdateLocation: (zip: string, city: string) => void;
 }
 
@@ -219,15 +221,21 @@ export function Settings({
   onClose,
   onToggleSource,
   onSetAllSources,
+  onAddCustomFeed,
+  onRemoveCustomFeed,
   onUpdateLocation,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('sources');
   const [zipInput, setZipInput] = useState(settings.location.zip);
+  const [customName, setCustomName] = useState('');
+  const [customUrl, setCustomUrl] = useState('');
+  const [customError, setCustomError] = useState('');
   const [locationSaved, setLocationSaved] = useState(false);
   const saveTimerRef = useRef<number | null>(null);
   const zipIsValid = /^\d{5}$/.test(zipInput);
-  const enabledSourceCount = settings.sources.filter(source => source.enabled).length;
-  const allSourcesEnabled = enabledSourceCount === settings.sources.length;
+  const configuredSources = [...settings.sources, ...settings.customFeeds];
+  const enabledSourceCount = configuredSources.filter(source => source.enabled).length;
+  const allSourcesEnabled = enabledSourceCount === configuredSources.length;
   const allSourcesDisabled = enabledSourceCount === 0;
 
   useEffect(() => () => {
@@ -245,7 +253,7 @@ export function Settings({
     }, UI_TIMING.feedbackDuration);
   };
 
-  const sourcesByCategory = settings.sources.reduce((groups, source) => {
+  const sourcesByCategory = configuredSources.reduce((groups, source) => {
     if (!groups[source.category]) groups[source.category] = [];
     groups[source.category].push(source);
     return groups;
@@ -257,6 +265,28 @@ export function Settings({
     science: 'Science',
     social: 'Social',
     finance: 'Finance',
+    local: 'Local',
+    custom: 'Custom feeds',
+  };
+
+  const handleAddCustomFeed = () => {
+    const name = customName.trim();
+    const url = customUrl.trim();
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      setCustomError('Enter a valid public http:// or https:// feed URL.');
+      return;
+    }
+    if (!name || !['http:', 'https:'].includes(parsedUrl.protocol)) {
+      setCustomError('Enter a name and a public http:// or https:// feed URL.');
+      return;
+    }
+    onAddCustomFeed(name, url);
+    setCustomName('');
+    setCustomUrl('');
+    setCustomError('');
   };
 
   return (
@@ -298,7 +328,7 @@ export function Settings({
           <div>
             <SourceToolbar>
               <Typography variant="caption" color="text.secondary">
-                {enabledSourceCount} of {settings.sources.length} enabled
+                {enabledSourceCount} of {configuredSources.length} enabled
               </Typography>
               <SourceActions>
                 <SourceAction
@@ -335,6 +365,49 @@ export function Settings({
                 </SourceGrid>
               </SourceCategory>
             ))}
+            <SourceCategory>
+              <CategoryLabel>Add a free public feed</CategoryLabel>
+              <FormStack>
+                <TextField
+                  label="Feed name"
+                  value={customName}
+                  onChange={event => setCustomName(event.target.value)}
+                  size="small"
+                  placeholder="Example News"
+                />
+                <TextField
+                  label="RSS or Atom URL"
+                  value={customUrl}
+                  onChange={event => setCustomUrl(event.target.value)}
+                  size="small"
+                  placeholder="https://example.com/feed.xml"
+                  error={Boolean(customError)}
+                  helperText={customError || 'The server only fetches public HTTP(S) feeds.'}
+                />
+                <Button
+                  variant="outlined"
+                  onClick={handleAddCustomFeed}
+                  disabled={!customName.trim() || !customUrl.trim()}
+                >
+                  Add feed
+                </Button>
+              </FormStack>
+              {settings.customFeeds.length > 0 && (
+                <div className="mt-3 grid gap-1">
+                  {settings.customFeeds.map(feed => (
+                    <div key={feed.id} className="flex items-center justify-between gap-3 rounded px-2 py-1.5 bg-white/[0.035]">
+                      <div className="min-w-0">
+                        <Typography variant="body2" noWrap>{feed.name}</Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap>{feed.url}</Typography>
+                      </div>
+                      <Button size="small" color="inherit" onClick={() => onRemoveCustomFeed(feed.id)}>
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SourceCategory>
           </div>
         )}
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { RSS_FEEDS } = require('../server/data-feeds.cjs');
-const { filterRecentItems, parseRSS } = require('../server/rss.cjs');
+const { filterRecentItems, parseAlexandriaNews, parseRSS } = require('../server/rss.cjs');
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -23,8 +23,10 @@ async function auditFeed(category, feed) {
       signal: controller.signal,
     });
     const xml = await response.text();
-    const parsed = parseRSS(xml, feed.name);
-    const current = filterRecentItems(parsed, { maxAgeMs: 7 * DAY });
+    const parsed = feed.parser === 'alexandria-html'
+      ? parseAlexandriaNews(xml, feed.name, feed.url)
+      : parseRSS(xml, feed.name);
+    const current = filterRecentItems(parsed, { maxAgeMs: feed.maxAgeMs || 7 * DAY });
     const recent48h = filterRecentItems(parsed, { maxAgeMs: 2 * DAY });
     const filtered = feed.filter ? current.filter(feed.filter) : current;
     const filtered48h = feed.filter ? recent48h.filter(feed.filter) : recent48h;
@@ -35,7 +37,7 @@ async function auditFeed(category, feed) {
     const descriptions = filtered.filter(item => item.description).length;
     const status = !response.ok || parsed.length === 0
       ? 'FAIL'
-      : filtered.length === 0 || !newest || Date.now() - newest > 7 * DAY
+      : filtered.length === 0 || !newest || Date.now() - newest > (feed.maxAgeMs || 7 * DAY)
         ? 'STALE'
         : 'OK';
 

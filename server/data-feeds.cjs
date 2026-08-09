@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
-const { filterRecentItems, parseRSS } = require('./rss.cjs');
+const { filterRecentItems, parseAlexandriaNews, parseRSS } = require('./rss.cjs');
 
 function stableId(prefix, title, source) {
   const hash = crypto.createHash('md5').update(`${source}:${title}`).digest('hex').slice(0, 10);
@@ -64,10 +64,52 @@ const RSS_FEEDS = {
     { name: 'ProPublica', url: 'https://feeds.propublica.org/propublica/main' },
     { name: 'Foreign Policy', url: 'https://foreignpolicy.com/feed/' },
     { name: 'Breitbart', url: 'https://feeds.feedburner.com/breitbart' },
+    // Free international and regional reporting
+    { name: 'RFI', url: 'https://www.rfi.fr/en/rss' },
+    { name: 'The Hindu', url: 'https://www.thehindu.com/feeder/default.rss' },
+    { name: 'Indian Express', url: 'https://indianexpress.com/feed/' },
+    { name: 'SCMP', url: 'https://www.scmp.com/rss/91/feed' },
+    { name: 'El Pais', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/english.elpais.com/portada' },
+    { name: 'Euronews', url: 'https://feeds.feedburner.com/euronews/en/news' },
+    { name: 'The New Humanitarian', url: 'https://www.thenewhumanitarian.org/rss.xml', maxAgeMs: 90 * 24 * 60 * 60 * 1000 },
+    { name: 'African Arguments', url: 'https://africanarguments.org/feed/' },
+    { name: 'The Conversation', url: 'https://theconversation.com/us/articles.atom' },
+    // Free official and primary reporting
+    { name: 'White House', url: 'https://www.whitehouse.gov/news/feed/' },
+    { name: 'Defense.gov', url: 'https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=400&Site=945' },
+    { name: 'Congress.gov', url: 'https://www.congress.gov/rss/most-viewed-bills.xml', maxAgeMs: 90 * 24 * 60 * 60 * 1000 },
+    { name: 'CISA', url: 'https://www.cisa.gov/cybersecurity-advisories/all.xml' },
+    { name: 'NOAA', url: 'https://www.noaa.gov/rss.xml' },
+    {
+      name: 'SEC',
+      url: 'https://www.sec.gov/rss/news/press.xml',
+      nativeFetch: true,
+    },
+    { name: 'Federal Reserve', url: 'https://www.federalreserve.gov/feeds/press_all.xml' },
+    {
+      name: 'BLS',
+      url: 'https://www.bls.gov/feed/bls_latest.rss',
+      nativeFetch: true,
+    },
+    { name: 'EIA', url: 'https://www.eia.gov/rss/todayinenergy.xml' },
+    {
+      name: 'FDA Press Releases',
+      url: 'https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml',
+    },
+    {
+      name: 'FDA Recalls',
+      url: 'https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/recalls/rss.xml',
+    },
+    { name: 'CDC Travel Notices', url: 'https://wwwnc.cdc.gov/travel/rss/notices.xml' },
+    // Free verification and investigative reporting
+    { name: 'FactCheck.org', url: 'https://www.factcheck.org/feed/' },
+    { name: 'Snopes', url: 'https://www.snopes.com/feed/' },
+    { name: 'ICIJ', url: 'https://www.icij.org/feed/' },
+    { name: 'Bellingcat', url: 'https://www.bellingcat.com/feed/', maxAgeMs: 30 * 24 * 60 * 60 * 1000 },
   ],
   tech: [
     { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
-    { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
+    { name: 'The Verge', url: 'https://www.theverge.com/rss/creators/index.xml' },
     { name: 'TechCrunch', url: 'https://techcrunch.com/feed/' },
     {
       name: 'Wired',
@@ -88,6 +130,16 @@ const RSS_FEEDS = {
       url: 'https://www.404media.co/rss/',
       filter: item => !/^podcast:/i.test(item.title),
     },
+    { name: 'KrebsOnSecurity', url: 'https://krebsonsecurity.com/feed/' },
+    { name: 'Dark Reading', url: 'https://www.darkreading.com/rss.xml' },
+    { name: 'IEEE Spectrum', url: 'https://spectrum.ieee.org/feeds/feed.rss' },
+    { name: 'The Markup', url: 'https://themarkup.org/feeds/rss.xml', maxAgeMs: 90 * 24 * 60 * 60 * 1000 },
+    { name: 'GitHub Engineering', url: 'https://github.blog/engineering/feed/' },
+    { name: 'GitHub Security', url: 'https://github.blog/security/feed/' },
+    { name: 'OpenAI News', url: 'https://openai.com/news/rss.xml' },
+    { name: 'Google AI', url: 'https://blog.google/technology/ai/rss/' },
+    { name: 'AWS News', url: 'https://aws.amazon.com/blogs/aws/feed/' },
+    { name: 'Cloudflare', url: 'https://blog.cloudflare.com/rss/' },
   ],
   science: [
     // Science news and explanatory reporting
@@ -114,10 +166,15 @@ const RSS_FEEDS = {
       name: 'PNAS',
       url: 'https://www.pnas.org/action/showFeed?type=etoc&feed=rss&jc=pnas',
       filter: item => !/^in this issue$/i.test(item.title),
+      maxAgeMs: 30 * 24 * 60 * 60 * 1000,
     },
     { name: 'Cell', url: 'https://www.cell.com/cell/current.rss' },
     { name: 'Science Advances', url: 'https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=sciadv' },
-    { name: 'eLife', url: 'https://elifesciences.org/rss/recent.xml' },
+    {
+      name: 'eLife',
+      url: 'https://elifesciences.org/rss/recent.xml',
+      headers: { 'User-Agent': 'BlakeNewsNow/0.4 (RSS reader)' },
+    },
     {
       name: 'PLOS ONE',
       url: 'https://journals.plos.org/plosone/feed/atom',
@@ -140,6 +197,33 @@ const RSS_FEEDS = {
       url: 'https://www.tandfonline.com/feed/rss/terg20',
       filter: item => !/^(correction|retraction):/i.test(item.title),
     },
+    // Climate, health, and earth-system reporting
+    {
+      name: 'Carbon Brief',
+      url: 'https://www.carbonbrief.org/feed/',
+      headers: { 'User-Agent': 'BlakeNewsNow/0.4 (RSS reader)' },
+    },
+    {
+      name: 'Mongabay',
+      url: 'https://news.mongabay.com/feed/',
+      headers: { 'User-Agent': 'BlakeNewsNow/0.4 (RSS reader)' },
+    },
+    { name: 'STAT', url: 'https://www.statnews.com/feed/' },
+    { name: 'WHO', url: 'https://www.who.int/rss-feeds/news-english.xml', maxAgeMs: 365 * 24 * 60 * 60 * 1000 },
+    { name: 'Undark', url: 'https://undark.org/feed/' },
+    { name: 'USGS Earthquakes', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.atom' },
+  ],
+  local: [
+    { name: 'WTOP', url: 'https://wtop.com/feed/' },
+    { name: 'WAMU', url: 'https://wamu.org/feed/' },
+    { name: 'Alexandria City', url: 'https://www.alexandriava.gov/News', parser: 'alexandria-html', maxAgeMs: 30 * 24 * 60 * 60 * 1000 },
+    { name: 'Alexandria Times', url: 'https://alextimes.com/feed/' },
+    { name: 'ALXnow', url: 'https://www.alxnow.com/feed/' },
+    { name: 'Virginia Mercury', url: 'https://www.virginiamercury.com/feed/' },
+    { name: 'Washington Post Local', url: 'https://feeds.washingtonpost.com/rss/local' },
+    { name: 'DC News Now', url: 'https://www.dcnewsnow.com/feed/' },
+    { name: 'Washington City Paper', url: 'https://washingtoncitypaper.com/feed/' },
+    { name: 'Washington Blade', url: 'https://www.washingtonblade.com/feed/' },
   ],
   ticker: [
     { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml' },
@@ -163,6 +247,9 @@ const cache = {
   headlines: { data: null, timestamp: 0 },
   tech: { data: null, timestamp: 0 },
   science: { data: null, timestamp: 0 },
+  local: { data: null, timestamp: 0 },
+  gdelt: { data: null, timestamp: 0 },
+  macro: { data: null, timestamp: 0 },
   ticker: { data: null, timestamp: 0 },
   markets: { data: null, timestamp: 0 },
   crypto: { data: null, timestamp: 0 },
@@ -182,6 +269,9 @@ const CACHE_TTL = {
   headlines: 60 * 1000,  // 1 minute
   tech: 60 * 1000,       // 1 minute
   science: 60 * 1000,    // 1 minute
+  local: 60 * 1000,       // 1 minute
+  gdelt: 5 * 60 * 1000,   // Public GDELT endpoint asks clients to poll slowly
+  macro: 5 * 60 * 1000,
   ticker: 60 * 1000,     // 1 minute
   markets: 30 * 1000,    // 30 seconds
   crypto: 60 * 1000,     // 1 minute
@@ -204,6 +294,7 @@ const CONTENT_MAX_AGE = {
 };
 
 const inFlightRequests = new Map();
+let gdeltBackoffUntil = 0;
 
 function dedupeRequest(key, loader) {
   if (inFlightRequests.has(key)) return inFlightRequests.get(key);
@@ -234,7 +325,15 @@ function fetch(url, options = {}, redirectCount = 0) {
       return reject(new Error('Too many redirects'));
     }
 
-    const parsedUrl = new URL(url);
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return reject(new Error('Invalid URL'));
+    }
+    if (!isSafePublicUrl(parsedUrl)) {
+      return reject(new Error('URL must point to a public HTTP(S) host'));
+    }
     const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
     const reqOptions = {
@@ -280,6 +379,43 @@ function fetch(url, options = {}, redirectCount = 0) {
   });
 }
 
+async function fetchConfiguredFeed(feed, options = {}) {
+  if (!feed.nativeFetch) {
+    return fetch(feed.url, options);
+  }
+
+  const response = await globalThis.fetch(feed.url, {
+    headers: {
+      Accept: options.accept || '*/*',
+      'User-Agent': 'Mozilla/5.0',
+      ...feed.headers,
+      ...options.headers,
+    },
+    signal: AbortSignal.timeout(options.timeout || 10000),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return { data: await response.text(), status: response.status };
+}
+
+function isSafePublicUrl(value) {
+  const parsed = value instanceof URL ? value : new URL(value);
+  const hostname = parsed.hostname.toLowerCase();
+  const isPrivateIpv4 = /^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(hostname);
+  const isPrivateIpv6 = hostname === '::1' || hostname.startsWith('fc') || hostname.startsWith('fd') || hostname.startsWith('fe80:');
+  return (
+    (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+    !parsed.username &&
+    !parsed.password &&
+    !parsed.port.match(/^(?!80$|443$)\d+$/) &&
+    hostname !== 'localhost' &&
+    !hostname.endsWith('.local') &&
+    !hostname.endsWith('.internal') &&
+    hostname !== 'metadata.google.internal' &&
+    !isPrivateIpv4 &&
+    !isPrivateIpv6
+  );
+}
+
 function decodeEntities(str) {
   return str
     .replace(/&amp;/g, '&')
@@ -295,6 +431,63 @@ function stripHtml(str) {
   return str.replace(/<[^>]+>/g, '').trim();
 }
 
+function parseGdeltDate(value) {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second] = match;
+  const date = new Date(Date.UTC(
+    Number(year), Number(month) - 1, Number(day),
+    Number(hour), Number(minute), Number(second)
+  ));
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+async function fetchGdeltArticles() {
+  if (isCacheValid('gdelt')) return cache.gdelt.data;
+  if (Date.now() < gdeltBackoffUntil) return cache.gdelt.data || [];
+
+  try {
+    const query = new URLSearchParams({
+      query: 'sourcelang:english',
+      mode: 'artlist',
+      format: 'json',
+      maxrecords: '30',
+      sort: 'datedesc',
+    });
+    const { data } = await fetch(`https://api.gdeltproject.org/api/v2/doc/doc?${query}`, {
+      accept: 'application/json',
+      timeout: 12000,
+    });
+    const document = JSON.parse(data);
+    const result = (document.articles || []).flatMap(article => {
+      const title = typeof article.title === 'string' ? article.title.trim() : '';
+      const link = typeof article.url === 'string' ? article.url : '';
+      const pubDate = parseGdeltDate(article.seendate);
+      let safeLink = false;
+      try {
+        safeLink = isSafePublicUrl(link);
+      } catch {
+        safeLink = false;
+      }
+      if (!title || !safeLink || !pubDate) return [];
+      return [{
+        title,
+        link,
+        pubDate,
+        description: article.domain ? `Indexed from ${article.domain}` : '',
+        source: 'GDELT',
+      }];
+    });
+    if (result.length > 0) cache.gdelt = { data: result, timestamp: Date.now() };
+    return result.length > 0 ? result : cache.gdelt.data || [];
+  } catch (err) {
+    console.error('[GDELT]', err.message);
+    if (/HTTP 429/.test(err.message)) gdeltBackoffUntil = Date.now() + 10 * 1000;
+    return cache.gdelt.data || [];
+  }
+}
+
 // ============================================
 // Fetch Headlines
 // ============================================
@@ -306,15 +499,19 @@ async function loadHeadlinePool() {
   console.log('[DATA] Fetching headlines...');
 
   // Fetch all feeds in parallel for speed
-  const feedResults = await Promise.all(
+  const [rssResults, gdeltItems] = await Promise.all([
+    Promise.all(
     RSS_FEEDS.headlines.map(async (feed) => {
       try {
-        const { data } = await fetch(feed.url, {
+        const { data } = await fetchConfiguredFeed(feed, {
           accept: 'application/rss+xml, application/xml, text/xml',
           headers: feed.headers,
+          timeout: 10000,
         });
         const parsedItems = parseRSS(data, feed.name);
-        let items = filterRecentItems(parsedItems, { maxAgeMs: CONTENT_MAX_AGE.headlines });
+        let items = filterRecentItems(parsedItems, {
+          maxAgeMs: feed.maxAgeMs || CONTENT_MAX_AGE.headlines,
+        });
         if (items.length < parsedItems.length) {
           console.log(`[DATA] ${feed.name}: dropped ${parsedItems.length - items.length} stale, undated, or invalid items`);
         }
@@ -332,9 +529,11 @@ async function loadHeadlinePool() {
         return [];
       }
     })
-  );
+    ),
+    fetchGdeltArticles(),
+  ]);
 
-  const allItems = feedResults.flat();
+  const allItems = [...rssResults.flat(), ...gdeltItems];
 
   // Sort by date, newest first
   allItems.sort((a, b) => b.pubDate - a.pubDate);
@@ -375,7 +574,7 @@ async function fetchHeadlines(requestedSources = null) {
 
 function parseRequestedHeadlineSources(value) {
   if (value === undefined) return null;
-  const allowedSources = new Set(RSS_FEEDS.headlines.map(feed => feed.name));
+  const allowedSources = new Set([...RSS_FEEDS.headlines.map(feed => feed.name), 'GDELT']);
   const raw = Array.isArray(value) ? value.join(',') : String(value);
   return new Set(
     raw
@@ -622,6 +821,71 @@ function formatCoinGecko(data) {
     change: Math.round(change * 100) / 100,
     changePercent: Math.round(changePercent * 100) / 100,
   };
+}
+
+// ============================================
+// Fetch free macroeconomic data (FRED)
+// ============================================
+async function fetchFredSeries(series) {
+  const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(series.id)}&cosd=2025-01-01`;
+  // FRED's CSV endpoint intermittently stalls when accessed through the
+  // generic RSS request helper, so use Node's native fetch for this fixed,
+  // public endpoint.
+  const response = await globalThis.fetch(url, {
+    headers: {
+      Accept: 'text/csv',
+      'User-Agent': 'BlakeNewsNow/0.4 (macro reader)',
+    },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.text();
+  const rows = data
+    .trim()
+    .split(/\r?\n/)
+    .slice(1)
+    .map(line => {
+      const [date, rawValue] = line.split(',');
+      const value = Number(rawValue);
+      return { date, value };
+    })
+    .filter(row => row.date && Number.isFinite(row.value));
+  const latest = rows.at(-1);
+  const previous = rows.at(-2);
+  if (!latest) return null;
+  return {
+    id: series.id,
+    name: series.name,
+    unit: series.unit,
+    value: latest.value,
+    previousValue: previous?.value ?? null,
+    change: previous ? latest.value - previous.value : null,
+    date: latest.date,
+    url: `https://fred.stlouisfed.org/series/${encodeURIComponent(series.id)}`,
+    source: 'FRED',
+  };
+}
+
+async function fetchMacroData() {
+  if (isCacheValid('macro')) return cache.macro.data;
+
+  const series = [
+    { id: 'CPIAUCSL', name: 'CPI', unit: 'index' },
+    { id: 'UNRATE', name: 'Unemployment', unit: '%' },
+    { id: 'FEDFUNDS', name: 'Fed funds', unit: '%' },
+    { id: 'DGS10', name: '10Y Treasury', unit: '%' },
+  ];
+  const results = await Promise.all(series.map(async item => {
+    try {
+      return await fetchFredSeries(item);
+    } catch (err) {
+      console.error(`[FRED] ${item.id} failed:`, err.message);
+      return null;
+    }
+  }));
+  const data = results.filter(Boolean);
+  if (data.length > 0) cache.macro = { data, timestamp: Date.now() };
+  return data.length > 0 ? data : cache.macro.data || [];
 }
 
 // ============================================
@@ -989,6 +1253,61 @@ function normalizePolymarketMarket(market, now = Date.now()) {
   };
 }
 
+function normalizeKalshiMarket(market, now = Date.now()) {
+  const question = typeof market?.title === 'string' ? market.title.trim() : '';
+  const volume24h = Number(market?.volume_24h_fp);
+  const yesPrice = Number(market?.last_price_dollars || market?.yes_bid_dollars);
+  const marketEnd = new Date(market?.close_time || market?.expiration_time).getTime();
+  if (
+    !market?.ticker ||
+    !question ||
+    market.status !== 'active' ||
+    isSportsMarket(question) ||
+    !Number.isFinite(volume24h) ||
+    volume24h < 1000 ||
+    !Number.isFinite(yesPrice) ||
+    yesPrice < 0.02 ||
+    yesPrice > 0.98 ||
+    (Number.isFinite(marketEnd) && marketEnd <= now)
+  ) {
+    return null;
+  }
+
+  return {
+    id: `kalshi-${market.ticker}`,
+    question: truncateQuestion(question),
+    yesPrice: Math.round(yesPrice * 100),
+    volume24h,
+    volumeDisplay: formatVolume(volume24h),
+    slug: market.ticker,
+    eventSlug: market.event_ticker || market.ticker,
+    url: `https://kalshi.com/markets/${encodeURIComponent(market.event_ticker || market.ticker)}/${encodeURIComponent(market.ticker)}`,
+    endDate: Number.isFinite(marketEnd) ? new Date(marketEnd).toISOString() : null,
+    category: categorizeMarket(question),
+    source: 'Kalshi',
+  };
+}
+
+async function fetchKalshiDirect() {
+  console.log('[DATA] Fetching predictions from Kalshi...');
+  try {
+    const { data } = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?limit=1000&status=open', {
+      headers: { 'Accept': 'application/json' },
+      timeout: 12000,
+    });
+    const markets = JSON.parse(data).markets || [];
+    const result = markets
+      .map(market => normalizeKalshiMarket(market))
+      .filter(Boolean)
+      .sort((a, b) => b.volume24h - a.volume24h)
+      .slice(0, 25);
+    return result;
+  } catch (err) {
+    console.error('[KALSHI]', err.message);
+    return [];
+  }
+}
+
 async function fetchPolymarketDirect() {
   console.log('[DATA] Fetching predictions from Polymarket...');
 
@@ -1120,8 +1439,9 @@ async function fetchPredictions() {
     return cache.predictions.data;
   }
 
-  const [polymarket, pizzint] = await Promise.all([
+  const [polymarket, kalshi, pizzint] = await Promise.all([
     fetchPolymarketDirect(),
+    fetchKalshiDirect(),
     fetchPizzintWatch(),
   ]);
 
@@ -1130,6 +1450,12 @@ async function fetchPredictions() {
   const merged = [];
 
   for (const item of polymarket) {
+    if (item.slug) seenSlugs.add(item.slug);
+    merged.push(item);
+  }
+
+  for (const item of kalshi) {
+    if (item.slug && seenSlugs.has(item.slug)) continue;
     if (item.slug) seenSlugs.add(item.slug);
     merged.push(item);
   }
@@ -1205,7 +1531,9 @@ async function fetchTechNews() {
           headers: feed.headers,
         });
         const parsedItems = parseRSS(data, feed.name);
-        let items = filterRecentItems(parsedItems, { maxAgeMs: CONTENT_MAX_AGE.tech });
+        let items = filterRecentItems(parsedItems, {
+          maxAgeMs: feed.maxAgeMs || CONTENT_MAX_AGE.tech,
+        });
         if (items.length < parsedItems.length) {
           console.log(`[DATA] ${feed.name}: dropped ${parsedItems.length - items.length} stale, undated, or invalid items`);
         }
@@ -1268,7 +1596,9 @@ async function loadSciencePool() {
           headers: feed.headers,
         });
         const parsedItems = parseRSS(data, feed.name);
-        let items = filterRecentItems(parsedItems, { maxAgeMs: CONTENT_MAX_AGE.science });
+        let items = filterRecentItems(parsedItems, {
+          maxAgeMs: feed.maxAgeMs || CONTENT_MAX_AGE.science,
+        });
         if (items.length < parsedItems.length) {
           console.log(`[DATA] ${feed.name}: dropped ${parsedItems.length - items.length} stale, undated, or invalid items`);
         }
@@ -1332,6 +1662,144 @@ function parseRequestedScienceSources(value) {
       .map(source => source.trim())
       .filter(source => allowedSources.has(source))
   );
+}
+
+// ============================================
+// Fetch Local News (DC and Alexandria)
+// ============================================
+async function loadLocalPool() {
+  if (isCacheValid('local')) return cache.local.data;
+
+  console.log('[DATA] Fetching DC and Alexandria local news...');
+  const feedResults = await Promise.all(
+    RSS_FEEDS.local.map(async feed => {
+      try {
+        const { data } = await fetch(feed.url, {
+          accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+          headers: feed.headers,
+          timeout: 10000,
+        });
+        const parsedItems = feed.parser === 'alexandria-html'
+          ? parseAlexandriaNews(data, feed.name, feed.url)
+          : parseRSS(data, feed.name);
+        let items = filterRecentItems(parsedItems, {
+          maxAgeMs: feed.maxAgeMs || CONTENT_MAX_AGE.headlines,
+        });
+        if (feed.filter) items = items.filter(feed.filter);
+        console.log(`[DATA] Local ${feed.name}: ${items.length} items`);
+        return items;
+      } catch (err) {
+        console.error(`[DATA] Local ${feed.name} failed:`, err.message);
+        return [];
+      }
+    })
+  );
+
+  const allItems = feedResults.flat().sort((a, b) => b.pubDate - a.pubDate);
+  const seen = new Set();
+  const unique = allItems.filter(item => {
+    const key = item.title.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const result = unique.map(item => ({
+    id: stableId('local', item.title, item.source),
+    title: item.title,
+    source: item.source,
+    timestamp: item.pubDate.toISOString(),
+    link: item.link,
+    description: item.description,
+  }));
+
+  cache.local = { data: result, timestamp: Date.now() };
+  return result;
+}
+
+function selectLocalItems(items, requestedSources = null) {
+  const eligible = requestedSources === null
+    ? items
+    : items.filter(item => requestedSources.has(item.source));
+  return selectDiverseItems(eligible, 50, 8);
+}
+
+async function fetchLocalNews(requestedSources = null) {
+  const pool = await dedupeRequest('local-pool', loadLocalPool);
+  return selectLocalItems(pool, requestedSources);
+}
+
+function parseRequestedLocalSources(value) {
+  if (value === undefined) return null;
+  const allowedSources = new Set(RSS_FEEDS.local.map(feed => feed.name));
+  const raw = Array.isArray(value) ? value.join(',') : String(value);
+  return new Set(
+    raw
+      .split(',')
+      .map(source => source.trim())
+      .filter(source => allowedSources.has(source))
+  );
+}
+
+// ============================================
+// Fetch user-provided public RSS/Atom feeds
+// ============================================
+function normalizeCustomFeedDefinitions(value) {
+  let definitions;
+  try {
+    definitions = JSON.parse(String(value || '[]'));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(definitions)) return [];
+
+  return definitions
+    .slice(0, 20)
+    .flatMap(definition => {
+      const name = typeof definition?.name === 'string' ? definition.name.trim().slice(0, 100) : '';
+      const url = typeof definition?.url === 'string' ? definition.url.trim() : '';
+      if (!name || !url) return [];
+      try {
+        if (!isSafePublicUrl(url)) return [];
+      } catch {
+        return [];
+      }
+      return [{ name, url }];
+    });
+}
+
+async function fetchCustomFeeds(definitions) {
+  const results = await Promise.all(definitions.map(async feed => {
+    try {
+      const { data } = await fetch(feed.url, {
+        accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+        headers: { 'User-Agent': 'BlakeNewsNow/0.4 (user RSS feed)' },
+        timeout: 10000,
+      });
+      const items = filterRecentItems(parseRSS(data, feed.name), {
+        maxAgeMs: CONTENT_MAX_AGE.headlines,
+      });
+      return items.map(item => ({
+        id: stableId('custom', item.title, item.source),
+        title: item.title,
+        source: item.source,
+        timestamp: item.pubDate.toISOString(),
+        link: item.link,
+        description: item.description,
+      }));
+    } catch (err) {
+      console.error(`[DATA] Custom ${feed.name} failed:`, err.message);
+      return [];
+    }
+  }));
+
+  const allItems = results.flat().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const seen = new Set();
+  return selectDiverseItems(allItems.filter(item => {
+    const key = item.title.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }), 50, 8);
 }
 
 // ============================================
@@ -1715,6 +2183,31 @@ function registerRoutes(app) {
     }
   });
 
+  app.get('/api/local', async (req, res) => {
+    try {
+      const requestedSources = parseRequestedLocalSources(req.query.sources);
+      const data = await fetchLocalNews(requestedSources);
+      res.json(data);
+    } catch (err) {
+      console.error('[API] Local news error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/custom', async (req, res) => {
+    try {
+      const definitions = normalizeCustomFeedDefinitions(req.query.feeds);
+      const data = await dedupeRequest(
+        `custom:${JSON.stringify(definitions)}`,
+        () => fetchCustomFeeds(definitions)
+      );
+      res.json(data);
+    } catch (err) {
+      console.error('[API] Custom feeds error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/api/ticker', async (req, res) => {
     try {
       const data = await dedupeRequest('ticker', fetchTicker);
@@ -1741,6 +2234,16 @@ function registerRoutes(app) {
       res.json(data);
     } catch (err) {
       console.error('[API] Crypto error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/macro', async (_req, res) => {
+    try {
+      const data = await dedupeRequest('macro', fetchMacroData);
+      res.json(data);
+    } catch (err) {
+      console.error('[API] Macro data error:', err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1846,22 +2349,27 @@ function registerRoutes(app) {
     }
   });
 
-  console.log('[DATA] API routes registered: /api/headlines, /api/ticker, /api/markets, /api/crypto, /api/weather, /api/radar, /api/predictions, /api/lemmy, /api/open-social, /api/hackernews, /api/4chan, /api/tech, /api/science');
+  console.log('[DATA] API routes registered: /api/headlines, /api/local, /api/custom, /api/ticker, /api/markets, /api/crypto, /api/macro, /api/weather, /api/radar, /api/predictions, /api/lemmy, /api/open-social, /api/hackernews, /api/4chan, /api/tech, /api/science');
 }
 
 module.exports = {
   RSS_FEEDS,
   normalizePolymarketMarket,
+  normalizeKalshiMarket,
   selectDiverseItems,
   selectHeadlineItems,
   selectScienceItems,
+  selectLocalItems,
   normalizeBlueskyPost,
   normalizeMastodonLink,
   registerRoutes,
   fetchHeadlines,
+  fetchLocalNews,
+  fetchCustomFeeds,
   fetchTicker,
   fetchMarkets,
   fetchCrypto,
+  fetchMacroData,
   fetchWeather,
   fetchRadarData,
   fetchPredictions,

@@ -6,7 +6,7 @@ export interface SourceConfig {
   id: string;
   name: string;
   enabled: boolean;
-  category: 'news' | 'tech' | 'science' | 'social' | 'finance' | 'custom';
+  category: 'news' | 'tech' | 'science' | 'social' | 'finance' | 'local' | 'custom';
   priority: number;
   apiSources?: string[];
   url?: string;
@@ -71,18 +71,54 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'propublica', name: 'ProPublica', enabled: true, category: 'news', priority: 22 },
   { id: 'foreignpolicy', name: 'Foreign Policy', enabled: true, category: 'news', priority: 23 },
   { id: 'breitbart', name: 'Breitbart', enabled: true, category: 'news', priority: 24 },
+  { id: 'gdelt', name: 'GDELT', enabled: true, category: 'news', priority: 25 },
+  { id: 'rfi', name: 'RFI', enabled: true, category: 'news', priority: 26 },
+  { id: 'the-hindu', name: 'The Hindu', enabled: true, category: 'news', priority: 28 },
+  { id: 'indian-express', name: 'Indian Express', enabled: true, category: 'news', priority: 29 },
+  { id: 'scmp', name: 'SCMP', enabled: true, category: 'news', priority: 30 },
+  { id: 'el-pais', name: 'El Pais', enabled: true, category: 'news', priority: 31 },
+  { id: 'euronews', name: 'Euronews', enabled: true, category: 'news', priority: 32 },
+  { id: 'new-humanitarian', name: 'The New Humanitarian', enabled: true, category: 'news', priority: 33 },
+  { id: 'african-arguments', name: 'African Arguments', enabled: true, category: 'news', priority: 34 },
+  { id: 'the-conversation', name: 'The Conversation', enabled: true, category: 'news', priority: 35 },
+  { id: 'white-house', name: 'White House', enabled: true, category: 'news', priority: 36 },
+  { id: 'defense', name: 'Defense.gov', enabled: true, category: 'news', priority: 37 },
+  { id: 'congress', name: 'Congress.gov', enabled: true, category: 'news', priority: 38 },
+  { id: 'cisa', name: 'CISA', enabled: true, category: 'news', priority: 39 },
+  { id: 'noaa', name: 'NOAA', enabled: true, category: 'news', priority: 40 },
+  { id: 'sec', name: 'SEC', enabled: true, category: 'news', priority: 41 },
+  { id: 'federal-reserve', name: 'Federal Reserve', enabled: true, category: 'news', priority: 42 },
+  { id: 'bls', name: 'BLS', enabled: true, category: 'news', priority: 43 },
+  { id: 'eia', name: 'EIA', enabled: true, category: 'news', priority: 44 },
+  { id: 'fda-press-releases', name: 'FDA Press Releases', enabled: true, category: 'news', priority: 45 },
+  { id: 'fda-recalls', name: 'FDA Recalls', enabled: true, category: 'news', priority: 46 },
+  { id: 'cdc-travel-notices', name: 'CDC Travel Notices', enabled: true, category: 'news', priority: 47 },
+  { id: 'factcheck', name: 'FactCheck.org', enabled: true, category: 'news', priority: 48 },
+  { id: 'snopes', name: 'Snopes', enabled: true, category: 'news', priority: 49 },
+  { id: 'icij', name: 'ICIJ', enabled: true, category: 'news', priority: 50 },
+  { id: 'bellingcat', name: 'Bellingcat', enabled: true, category: 'news', priority: 51 },
   // Tech
-  { id: 'hackernews', name: 'Hacker News', enabled: true, category: 'tech', priority: 25 },
-  { id: 'arstechnica', name: 'Ars Technica', enabled: true, category: 'tech', priority: 26 },
-  { id: 'theverge', name: 'The Verge', enabled: true, category: 'tech', priority: 27 },
-  { id: 'techcrunch', name: 'TechCrunch', enabled: true, category: 'tech', priority: 28 },
-  { id: 'wired', name: 'Wired', enabled: true, category: 'tech', priority: 29 },
-  { id: 'lobsters', name: 'Lobsters', enabled: true, category: 'tech', priority: 30 },
-  { id: 'mit-tech-review', name: 'MIT Technology Review', enabled: true, category: 'tech', priority: 31 },
-  { id: 'bleepingcomputer', name: 'BleepingComputer', enabled: true, category: 'tech', priority: 32 },
-  { id: 'rest-of-world', name: 'Rest of World', enabled: true, category: 'tech', priority: 33 },
-  { id: 'the-register', name: 'The Register', enabled: true, category: 'tech', priority: 34 },
-  { id: '404-media', name: '404 Media', enabled: true, category: 'tech', priority: 35 },
+  { id: 'hackernews', name: 'Hacker News', enabled: true, category: 'tech', priority: 52 },
+  { id: 'arstechnica', name: 'Ars Technica', enabled: true, category: 'tech', priority: 53 },
+  { id: 'theverge', name: 'The Verge', enabled: true, category: 'tech', priority: 54 },
+  { id: 'techcrunch', name: 'TechCrunch', enabled: true, category: 'tech', priority: 55 },
+  { id: 'wired', name: 'Wired', enabled: true, category: 'tech', priority: 60 },
+  { id: 'lobsters', name: 'Lobsters', enabled: true, category: 'tech', priority: 61 },
+  { id: 'mit-tech-review', name: 'MIT Technology Review', enabled: true, category: 'tech', priority: 62 },
+  { id: 'bleepingcomputer', name: 'BleepingComputer', enabled: true, category: 'tech', priority: 63 },
+  { id: 'rest-of-world', name: 'Rest of World', enabled: true, category: 'tech', priority: 64 },
+  { id: 'the-register', name: 'The Register', enabled: true, category: 'tech', priority: 65 },
+  { id: '404-media', name: '404 Media', enabled: true, category: 'tech', priority: 66 },
+  { id: 'krebs', name: 'KrebsOnSecurity', enabled: true, category: 'tech', priority: 67 },
+  { id: 'dark-reading', name: 'Dark Reading', enabled: true, category: 'tech', priority: 68 },
+  { id: 'ieee-spectrum', name: 'IEEE Spectrum', enabled: true, category: 'tech', priority: 69 },
+  { id: 'the-markup', name: 'The Markup', enabled: true, category: 'tech', priority: 70 },
+  { id: 'github-engineering', name: 'GitHub Engineering', enabled: true, category: 'tech', priority: 71 },
+  { id: 'github-security', name: 'GitHub Security', enabled: true, category: 'tech', priority: 72 },
+  { id: 'openai-news', name: 'OpenAI News', enabled: true, category: 'tech', priority: 73 },
+  { id: 'google-ai', name: 'Google AI', enabled: true, category: 'tech', priority: 74 },
+  { id: 'aws-news', name: 'AWS News', enabled: true, category: 'tech', priority: 75 },
+  { id: 'cloudflare', name: 'Cloudflare', enabled: true, category: 'tech', priority: 76 },
   // Social
   { id: 'lemmy-news', name: 'Lemmy c/news', apiSources: ['c/news'], enabled: true, category: 'social', priority: 36 },
   { id: 'lemmy-world', name: 'Lemmy c/world', apiSources: ['c/world'], enabled: true, category: 'social', priority: 37 },
@@ -118,6 +154,23 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'frontiers-psychology', name: 'Frontiers in Psychology', enabled: true, category: 'science', priority: 64 },
   { id: 'human-factors', name: 'Human Factors', enabled: true, category: 'science', priority: 65 },
   { id: 'ergonomics', name: 'Ergonomics', enabled: true, category: 'science', priority: 66 },
+  { id: 'carbon-brief', name: 'Carbon Brief', enabled: true, category: 'science', priority: 77 },
+  { id: 'mongabay', name: 'Mongabay', enabled: true, category: 'science', priority: 78 },
+  { id: 'stat', name: 'STAT', enabled: true, category: 'science', priority: 79 },
+  { id: 'who', name: 'WHO', enabled: true, category: 'science', priority: 80 },
+  { id: 'undark', name: 'Undark', enabled: true, category: 'science', priority: 81 },
+  { id: 'usgs-earthquakes', name: 'USGS Earthquakes', enabled: true, category: 'science', priority: 82 },
+  // Local news for Washington, DC and Alexandria
+  { id: 'wtop', name: 'WTOP', enabled: true, category: 'local', priority: 83 },
+  { id: 'wamu', name: 'WAMU', enabled: true, category: 'local', priority: 84 },
+  { id: 'alexandria-city', name: 'Alexandria City', enabled: true, category: 'local', priority: 85 },
+  { id: 'alexandria-times', name: 'Alexandria Times', enabled: true, category: 'local', priority: 86 },
+  { id: 'alxnow', name: 'ALXnow', enabled: true, category: 'local', priority: 87 },
+  { id: 'virginia-mercury', name: 'Virginia Mercury', enabled: true, category: 'local', priority: 88 },
+  { id: 'washington-post-local', name: 'Washington Post Local', enabled: true, category: 'local', priority: 89 },
+  { id: 'dc-news-now', name: 'DC News Now', enabled: true, category: 'local', priority: 90 },
+  { id: 'washington-city-paper', name: 'Washington City Paper', enabled: true, category: 'local', priority: 91 },
+  { id: 'washington-blade', name: 'Washington Blade', enabled: true, category: 'local', priority: 92 },
 ];
 
 const DEFAULT_SETTINGS: Settings = {
@@ -250,14 +303,19 @@ export function toggleSource(settings: Settings, sourceId: string): Settings {
     sources: settings.sources.map(s =>
       s.id === sourceId ? { ...s, enabled: !s.enabled } : s
     ),
+    customFeeds: settings.customFeeds.map(s =>
+      s.id === sourceId ? { ...s, enabled: !s.enabled } : s
+    ),
   };
 }
 
 export function setAllSources(settings: Settings, enabled: boolean): Settings {
-  if (settings.sources.every(source => source.enabled === enabled)) return settings;
+  const allSources = [...settings.sources, ...settings.customFeeds];
+  if (allSources.every(source => source.enabled === enabled)) return settings;
   return {
     ...settings,
     sources: settings.sources.map(source => ({ ...source, enabled })),
+    customFeeds: settings.customFeeds.map(source => ({ ...source, enabled })),
   };
 }
 

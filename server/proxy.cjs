@@ -41,7 +41,7 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Register data feed API routes (headlines, weather, markets, predictions, ticker)
+// Register data feed API routes (headlines, local, custom, weather, markets, predictions, ticker)
 registerDataRoutes(app);
 registerArticlePreviewRoute(app);
 
@@ -94,6 +94,8 @@ app.listen(PORT, () => {
   console.log(`[SERVER] Blake News Now API running on http://localhost:${PORT}`);
   console.log('[SERVER] Available endpoints:');
   console.log('  - /api/headlines');
+  console.log('  - /api/local');
+  console.log('  - /api/custom');
   console.log('  - /api/tech');
   console.log('  - /api/science');
   console.log('  - /api/lemmy');
@@ -103,6 +105,7 @@ app.listen(PORT, () => {
   console.log('  - /api/weather');
   console.log('  - /api/crypto');
   console.log('  - /api/markets');
+  console.log('  - /api/macro');
   console.log('  - /api/predictions');
   console.log('  - /api/ticker');
   console.log('  - /api/radar/tile');

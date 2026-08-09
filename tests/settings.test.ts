@@ -63,6 +63,31 @@ test('includes science news outlets and journals as enabled science sources', ()
   }
 });
 
+test('includes free local, primary, regional, verification, and technical sources', () => {
+  const sources = new Map(DEFAULT_SETTINGS.sources.map(source => [source.id, source]));
+  for (const id of [
+    'gdelt',
+    'the-hindu',
+    'white-house',
+    'cisa',
+    'sec',
+    'factcheck',
+    'krebs',
+    'ieee-spectrum',
+    'openai-news',
+    'wtop',
+    'wamu',
+    'alexandria-city',
+    'alexandria-times',
+    'alxnow',
+  ]) {
+    assert.equal(sources.get(id)?.enabled, true);
+  }
+  assert.equal(sources.get('wtop')?.category, 'local');
+  assert.equal(sources.get('alexandria-city')?.category, 'local');
+  assert.equal(getSourceCategory('WTOP'), 'local');
+});
+
 test('selects and unselects every source in one immutable update', () => {
   const unselected = setAllSources(DEFAULT_SETTINGS, false);
   const selected = setAllSources(unselected, true);

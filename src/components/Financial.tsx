@@ -14,6 +14,18 @@ interface MarketsResponse {
   movers: MarketData[];
 }
 
+interface MacroData {
+  id: string;
+  name: string;
+  unit: string;
+  value: number;
+  previousValue: number | null;
+  change: number | null;
+  date: string;
+  url: string;
+  source: string;
+}
+
 function formatPrice(price: number): string {
   if (price >= 10000) return (price / 1000).toFixed(1) + 'k';
   if (price >= 1000) return price.toFixed(0);
@@ -44,10 +56,32 @@ function MarketItem({ item, href }: { item: MarketData; href?: string }) {
   );
 }
 
+function MacroItem({ item }: { item: MacroData }) {
+  const change = item.change;
+  const changeColor = change == null || change === 0
+    ? 'text-white/50'
+    : change > 0 ? 'text-amber-400' : 'text-green-400';
+  return (
+    <a
+      href={item.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center justify-between text-[11px] md:text-[10px] leading-tight py-1.5 md:py-1 px-1 -mx-1 rounded hover:bg-white/5 transition-colors"
+    >
+      <span className="text-white/70 truncate">{item.name}</span>
+      <span className="flex items-center gap-2 shrink-0 ml-2 tabular-nums">
+        <span className="text-white/80">{item.value.toFixed(item.id === 'CPIAUCSL' ? 1 : 2)}{item.unit === '%' ? '%' : ''}</span>
+        {change != null && <span className={changeColor}>{change > 0 ? '+' : ''}{change.toFixed(2)}</span>}
+      </span>
+    </a>
+  );
+}
+
 export function Financial() {
   const [indices, setIndices] = useState<MarketData[]>([]);
   const [crypto, setCrypto] = useState<MarketData[]>([]);
   const [movers, setMovers] = useState<MarketData[]>([]);
+  const [macro, setMacro] = useState<MacroData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -66,6 +100,21 @@ export function Financial() {
     }
     fetchMarkets();
     const interval = setInterval(fetchMarkets, REFRESH_INTERVALS.markets);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    async function fetchMacro() {
+      try {
+        const res = await fetch(`${API_BASE}/api/macro`);
+        if (!res.ok) throw new Error('Failed to fetch');
+        setMacro(await res.json());
+      } catch (err) {
+        console.error('Macro fetch error:', err);
+      }
+    }
+    fetchMacro();
+    const interval = setInterval(fetchMacro, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -130,6 +179,13 @@ export function Financial() {
                     href={`https://finance.yahoo.com/quote/${item.symbol}`}
                   />
                 ))}
+              </div>
+            )}
+
+            {macro.length > 0 && (
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-white/40 mb-0.5">Macro · FRED</div>
+                {macro.map(item => <MacroItem key={item.id} item={item} />)}
               </div>
             )}
           </div>

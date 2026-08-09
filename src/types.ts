@@ -2,7 +2,7 @@ export interface FeedItem {
   id: string;
   title: string;
   source: string;
-  sourceType: 'news' | 'tech' | 'science' | 'social';
+  sourceType: 'news' | 'tech' | 'science' | 'social' | 'local';
   category: string;
   timestamp: string;
   link: string;

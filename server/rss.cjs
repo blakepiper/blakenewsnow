@@ -63,6 +63,13 @@ function inferDateFromUrl(link) {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+function inferDateFromTitle(title) {
+  const match = title.match(/\b(?:week of\s+)?(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(20\d{2})\b/i);
+  if (!match) return null;
+  const date = new Date(`${match[1]} ${match[2]}, ${match[3]} 12:00:00 UTC`);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
 function extractDate(entry, link) {
   const candidates = [
     entry.pubDate,
@@ -109,7 +116,11 @@ function parseRSS(xml, sourceName) {
     const link = extractLink(entry.link || entry.guid);
     if (!title) return [];
 
-    const { date, dateSource } = extractDate(entry, link);
+    let { date, dateSource } = extractDate(entry, link);
+    if (!date) {
+      date = inferDateFromTitle(title);
+      if (date) dateSource = 'title';
+    }
     const descriptionRaw = textValue(
       entry.description || entry.summary || entry.content || entry['content:encoded']
     );
@@ -123,6 +134,33 @@ function parseRSS(xml, sourceName) {
       source: sourceName,
     }];
   });
+}
+
+function parseAlexandriaNews(html, sourceName, baseUrl = 'https://www.alexandriava.gov/News') {
+  const items = [];
+  const rowPattern = /<tr[\s\S]*?<td[^>]*releasedate[^>]*>([\s\S]*?)<\/td>[\s\S]*?<a\s+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/tr>/gi;
+  for (const match of html.matchAll(rowPattern)) {
+    const dateText = stripHtml(match[1]);
+    const title = decodeEntities(stripHtml(match[3]));
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(dateText)) continue;
+    let link;
+    try {
+      link = new URL(decodeEntities(match[2]), baseUrl).href;
+    } catch {
+      continue;
+    }
+    const pubDate = new Date(`${dateText}T12:00:00Z`);
+    if (!Number.isFinite(pubDate.getTime())) continue;
+    items.push({
+      title,
+      link,
+      pubDate,
+      dateSource: 'feed',
+      description: '',
+      source: sourceName,
+    });
+  }
+  return items;
 }
 
 function isHttpUrl(value) {
@@ -148,5 +186,7 @@ module.exports = {
   FUTURE_TOLERANCE_MS,
   filterRecentItems,
   inferDateFromUrl,
+  inferDateFromTitle,
+  parseAlexandriaNews,
   parseRSS,
 };

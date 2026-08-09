@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { filterRecentItems, inferDateFromUrl, parseRSS } = require('../server/rss.cjs');
+const { filterRecentItems, inferDateFromUrl, parseAlexandriaNews, parseRSS } = require('../server/rss.cjs');
 
 const NOW = new Date('2026-07-29T12:00:00.000Z').getTime();
 const WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -96,6 +96,31 @@ test('infers dates from common article URLs, then applies freshness', () => {
 
   assert.equal(item.dateSource, 'url');
   assert.deepEqual(filterRecentItems([item], { maxAgeMs: WEEK, now: NOW }), []);
+});
+
+test('infers a publication date from a dated feed title', () => {
+  const [item] = parseRSS(`
+    <rss><channel><item>
+      <title>Most-Viewed Bills - Week of August 2, 2026</title>
+      <link>https://www.congress.gov/most-viewed-bills</link>
+    </item></channel></rss>
+  `, 'Congress.gov');
+
+  assert.equal(item.pubDate.toISOString(), '2026-08-02T12:00:00.000Z');
+  assert.equal(item.dateSource, 'title');
+});
+
+test('parses current Alexandria city news rows from the public HTML page', () => {
+  const [item] = parseAlexandriaNews(`
+    <table><tr>
+      <td class="releasedate">2026-08-08</td>
+      <td><a href="/news/2026-08-08/example">City update</a></td>
+    </tr></table>
+  `);
+
+  assert.equal(item.title, 'City update');
+  assert.equal(item.link, 'https://www.alexandriava.gov/news/2026-08-08/example');
+  assert.equal(item.pubDate.toISOString(), '2026-08-08T12:00:00.000Z');
 });
 
 test('drops future timestamps and non-http links', () => {

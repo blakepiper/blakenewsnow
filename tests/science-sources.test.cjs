@@ -27,6 +27,12 @@ const JOURNALS = [
   'Frontiers in Psychology',
   'Human Factors',
   'Ergonomics',
+  'Carbon Brief',
+  'Mongabay',
+  'STAT',
+  'WHO',
+  'Undark',
+  'USGS Earthquakes',
 ];
 
 test('configures a distinct mix of science reporting and primary journals', () => {

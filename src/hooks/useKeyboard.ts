@@ -74,6 +74,7 @@ export function useKeyboard(handlers: KeyboardHandlers, enabled = true) {
       case '3':
       case '4':
       case '5':
+      case '6':
         e.preventDefault();
         handlersRef.current.onSection?.(parseInt(key));
         break;
@@ -95,6 +96,6 @@ export const KEYBOARD_SHORTCUTS = [
   { keys: ['/'], action: 'Search' },
   { keys: ['Esc'], action: 'Close panel/modal' },
   { keys: ['?'], action: 'Show keyboard shortcuts' },
-  { keys: ['1-5'], action: 'Jump to section' },
+  { keys: ['1-6'], action: 'Jump to section' },
   { keys: ['Ctrl+,'], action: 'Open settings' },
 ];

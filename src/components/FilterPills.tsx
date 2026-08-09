@@ -2,7 +2,7 @@ import { Tab, Tabs } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import type { SyntheticEvent } from 'react';
 
-export type FilterType = 'all' | 'news' | 'tech' | 'social' | 'science';
+export type FilterType = 'all' | 'news' | 'tech' | 'social' | 'science' | 'local';
 
 interface FilterPillsProps {
   activeFilter: FilterType;
@@ -15,6 +15,7 @@ const filters: { id: FilterType; label: string }[] = [
   { id: 'tech', label: 'Tech' },
   { id: 'social', label: 'Social' },
   { id: 'science', label: 'Science' },
+  { id: 'local', label: 'Local' },
 ];
 
 const FilterTabs = styled(Tabs)(({ theme }) => ({
