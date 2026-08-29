@@ -6,6 +6,7 @@
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
+const zlib = require('zlib');
 const { URL } = require('url');
 const { filterRecentItems, parseAlexandriaNews, parseRSS } = require('./rss.cjs');
 
@@ -53,6 +54,10 @@ function isLocalAdOrPromotion(item) {
 
 const localFeedFilter = item => !isLocalAdOrPromotion(item);
 
+// Some federal sites (sec.gov, bls.gov) reject the generic browser agent and want a
+// self-identifying client instead.
+const DECLARED_USER_AGENT = 'BlakeNewsNow/0.4 (+https://github.com/blakenewsnow; RSS reader)';
+
 // ============================================
 // RSS Feed Configuration
 // ============================================
@@ -99,15 +104,17 @@ const RSS_FEEDS = {
     { name: 'CISA', url: 'https://www.cisa.gov/cybersecurity-advisories/all.xml' },
     { name: 'NOAA', url: 'https://www.noaa.gov/rss.xml' },
     {
+      // sec.gov 403s the generic default agent and redirects the legacy /rss path.
       name: 'SEC',
-      url: 'https://www.sec.gov/rss/news/press.xml',
-      nativeFetch: true,
+      url: 'https://www.sec.gov/news/pressreleases.rss',
+      headers: { 'User-Agent': DECLARED_USER_AGENT },
     },
     { name: 'Federal Reserve', url: 'https://www.federalreserve.gov/feeds/press_all.xml' },
     {
+      // bls.gov 403s the generic default agent.
       name: 'BLS',
       url: 'https://www.bls.gov/feed/bls_latest.rss',
-      nativeFetch: true,
+      headers: { 'User-Agent': DECLARED_USER_AGENT },
     },
     { name: 'EIA', url: 'https://www.eia.gov/rss/todayinenergy.xml' },
     {
@@ -238,7 +245,8 @@ const RSS_FEEDS = {
     { name: 'Alexandria Times', url: 'https://alextimes.com/feed/', filter: localFeedFilter },
     { name: 'ALXnow', url: 'https://www.alxnow.com/feed/', filter: localFeedFilter },
     { name: 'Virginia Mercury', url: 'https://www.virginiamercury.com/feed/', filter: localFeedFilter },
-    { name: 'Washington Post Local', url: 'https://feeds.washingtonpost.com/rss/local', filter: localFeedFilter },
+    // feeds.washingtonpost.com routinely needs 8-10s to answer.
+    { name: 'Washington Post Local', url: 'https://feeds.washingtonpost.com/rss/local', filter: localFeedFilter, timeout: 20000 },
     { name: 'DC News Now', url: 'https://www.dcnewsnow.com/feed/', filter: localFeedFilter },
     { name: 'Washington City Paper', url: 'https://washingtoncitypaper.com/feed/', filter: localFeedFilter },
     { name: 'Washington Blade', url: 'https://www.washingtonblade.com/feed/', filter: localFeedFilter },
@@ -337,12 +345,131 @@ function isCacheValid(key) {
 // ============================================
 // HTTP Fetch Helper
 // ============================================
-function fetch(url, options = {}, redirectCount = 0) {
-  return new Promise((resolve, reject) => {
-    if (redirectCount > 5) {
-      return reject(new Error('Too many redirects'));
-    }
 
+// One process serves every feed category, so an unbounded `Promise.all` over the
+// feed lists opens ~110 TLS connections at once. Home routers and consumer links
+// drop most of them, which surfaces as ETIMEDOUT on sources that respond fine on
+// their own. Cap outbound requests instead and let the rest queue.
+const OUTBOUND_CONCURRENCY = Math.max(1, Number(process.env.FEED_CONCURRENCY) || 12);
+const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
+const MAX_REDIRECTS = 5;
+const RETRYABLE_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'EPIPE',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_SOCKET',
+  'ERR_SOCKET_CONNECTION_TIMEOUT',
+]);
+
+// Node abandons each Happy Eyeballs connection attempt after 250ms by default. On a
+// host with no global IPv6 route every AAAA attempt fails instantly and the A attempt
+// has to complete a TCP handshake inside that window, so ordinary latency to a distant
+// CDN surfaces as `AggregateError: ETIMEDOUT`. Give each attempt room to finish.
+const CONNECT_ATTEMPT_TIMEOUT_MS = Math.max(
+  250,
+  Number(process.env.FEED_CONNECT_ATTEMPT_TIMEOUT_MS) || 5000
+);
+
+const agentOptions = {
+  keepAlive: true,
+  keepAliveMsecs: 15000,
+  maxSockets: OUTBOUND_CONCURRENCY,
+  autoSelectFamilyAttemptTimeout: CONNECT_ATTEMPT_TIMEOUT_MS,
+};
+const httpsAgent = new https.Agent(agentOptions);
+const httpAgent = new http.Agent(agentOptions);
+
+let activeRequests = 0;
+const pendingRequests = [];
+
+function acquireRequestSlot() {
+  if (activeRequests < OUTBOUND_CONCURRENCY) {
+    activeRequests += 1;
+    return Promise.resolve();
+  }
+  return new Promise(resolve => pendingRequests.push(resolve));
+}
+
+function releaseRequestSlot() {
+  const next = pendingRequests.shift();
+  if (next) next();
+  else activeRequests -= 1;
+}
+
+async function withRequestSlot(task) {
+  await acquireRequestSlot();
+  try {
+    return await task();
+  } finally {
+    releaseRequestSlot();
+  }
+}
+
+// `AggregateError` from happy-eyeballs connects and undici's `TypeError: fetch failed`
+// both carry an empty or useless `message`, which logged as bare "SourceName failed:".
+function describeError(error, depth = 0) {
+  if (!error) return 'unknown error';
+  if (typeof error === 'string') return error;
+  if (depth > 2) return error.message || error.code || 'unknown error';
+
+  if (Array.isArray(error.errors) && error.errors.length) {
+    const causes = [...new Set(error.errors.map(inner => inner?.code || inner?.message).filter(Boolean))];
+    return `${error.code || error.name || 'AggregateError'} (${causes.slice(0, 3).join(', ')})`;
+  }
+
+  const name = error.name === 'Error' || error.name === 'TypeError' ? '' : error.name;
+  const label = error.message || error.code || name || 'unknown error';
+  if (error.cause) return `${label}: ${describeError(error.cause, depth + 1)}`;
+  return error.code && !label.includes(error.code) ? `${label} (${error.code})` : label;
+}
+
+function isRetryableError(error) {
+  if (!error) return false;
+  if (RETRYABLE_CODES.has(error.code)) return true;
+  if (error.message === 'Request timeout') return true;
+  if (Array.isArray(error.errors) && error.errors.some(isRetryableError)) return true;
+  return error.cause ? isRetryableError(error.cause) : false;
+}
+
+async function withRetry(task, { attempts = 2, label = '' } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts || !isRetryableError(error)) break;
+      if (label) console.warn(`[DATA] ${label}: ${describeError(error)} — retrying`);
+      await new Promise(resolve => setTimeout(resolve, 300 * attempt));
+    }
+  }
+  throw lastError;
+}
+
+function decompressResponse(res) {
+  switch ((res.headers['content-encoding'] || '').trim().toLowerCase()) {
+    case 'gzip':
+    case 'x-gzip':
+      return res.pipe(zlib.createGunzip());
+    case 'deflate':
+      return res.pipe(zlib.createInflate());
+    case 'br':
+      return res.pipe(zlib.createBrotliDecompress());
+    default:
+      return res;
+  }
+}
+
+// Performs a single round trip. Returns `{ redirect }` instead of following it so the
+// caller can release its concurrency slot between hops.
+function sendRequest(url, options) {
+  return new Promise((resolve, reject) => {
     let parsedUrl;
     try {
       parsedUrl = new URL(url);
@@ -352,33 +479,55 @@ function fetch(url, options = {}, redirectCount = 0) {
     if (!isSafePublicUrl(parsedUrl)) {
       return reject(new Error('URL must point to a public HTTP(S) host'));
     }
-    const protocol = parsedUrl.protocol === 'https:' ? https : http;
+    const isHttps = parsedUrl.protocol === 'https:';
+    const protocol = isHttps ? https : http;
 
     const reqOptions = {
       hostname: parsedUrl.hostname,
-      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      port: parsedUrl.port || (isHttps ? 443 : 80),
       path: parsedUrl.pathname + parsedUrl.search,
       method: options.method || 'GET',
+      agent: isHttps ? httpsAgent : httpAgent,
+      autoSelectFamilyAttemptTimeout: CONNECT_ATTEMPT_TIMEOUT_MS,
       headers: {
         'User-Agent': 'Mozilla/5.0',
         'Accept': options.accept || '*/*',
+        // Feed XML compresses roughly ten to one; without this the pool moves several
+        // megabytes per refresh and slow transfers start tripping the request timeout.
+        'Accept-Encoding': 'gzip, deflate, br',
         ...options.headers,
       },
-      timeout: options.timeout || 5000,
+      timeout: options.timeout || DEFAULT_REQUEST_TIMEOUT_MS,
     };
 
     const req = protocol.request(reqOptions, (res) => {
-      // Handle redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        const redirectUrl = res.headers.location.startsWith('http')
-          ? res.headers.location
-          : `${parsedUrl.protocol}//${parsedUrl.host}${res.headers.location}`;
-        return fetch(redirectUrl, options, redirectCount + 1).then(resolve).catch(reject);
+        res.resume();
+        let redirect;
+        try {
+          redirect = new URL(res.headers.location, parsedUrl).href;
+        } catch {
+          return reject(new Error(`Invalid redirect target from ${parsedUrl.host}`));
+        }
+        return resolve({ redirect });
+      }
+
+      let body;
+      try {
+        body = decompressResponse(res);
+      } catch (err) {
+        res.resume();
+        return reject(err);
       }
 
       let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
+      body.setEncoding('utf8');
+      body.on('error', err => {
+        req.destroy();
+        reject(err);
+      });
+      body.on('data', chunk => data += chunk);
+      body.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve({ data, status: res.statusCode });
         } else {
@@ -389,30 +538,112 @@ function fetch(url, options = {}, redirectCount = 0) {
 
     req.on('error', reject);
     req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timeout'));
+      req.destroy(new Error('Request timeout'));
     });
 
     req.end();
   });
 }
 
-async function fetchConfiguredFeed(feed, options = {}) {
-  if (!feed.nativeFetch) {
-    return fetch(feed.url, options);
+// A source that is down (or has blocked us) otherwise burns its full timeout budget on
+// every refresh, which both slows the response and keeps hammering the origin. Park it
+// after repeated failures and try again after a growing cooldown.
+const BREAKER_THRESHOLD = 3;
+const BREAKER_BASE_COOLDOWN_MS = 5 * 60 * 1000;
+const BREAKER_MAX_COOLDOWN_MS = 60 * 60 * 1000;
+const sourceHealth = new Map();
+
+function breakerKey(url, label) {
+  if (label) return label;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+function breakerCooldownRemaining(key) {
+  const health = sourceHealth.get(key);
+  if (!health || !health.until) return 0;
+  return Math.max(0, health.until - Date.now());
+}
+
+function recordSourceSuccess(key) {
+  sourceHealth.delete(key);
+}
+
+function recordSourceFailure(key) {
+  const health = sourceHealth.get(key) || { failures: 0, until: 0 };
+  health.failures += 1;
+  if (health.failures >= BREAKER_THRESHOLD) {
+    const backoff = BREAKER_BASE_COOLDOWN_MS * 2 ** (health.failures - BREAKER_THRESHOLD);
+    health.until = Date.now() + Math.min(backoff, BREAKER_MAX_COOLDOWN_MS);
+  }
+  sourceHealth.set(key, health);
+}
+
+function formatDuration(ms) {
+  const minutes = Math.round(ms / 60000);
+  return minutes >= 1 ? `${minutes}m` : `${Math.round(ms / 1000)}s`;
+}
+
+// Runs `task` under the breaker for `key`: refuses immediately while the source is
+// parked, and records the outcome so repeated failures widen the cooldown.
+async function withBreaker(key, task) {
+  const cooldown = breakerCooldownRemaining(key);
+  if (cooldown > 0) {
+    const { failures } = sourceHealth.get(key);
+    throw new Error(
+      `skipped after ${failures} consecutive failures, retrying in ${formatDuration(cooldown)}`
+    );
   }
 
-  const response = await globalThis.fetch(feed.url, {
-    headers: {
-      Accept: options.accept || '*/*',
-      'User-Agent': 'Mozilla/5.0',
-      ...feed.headers,
-      ...options.headers,
-    },
-    signal: AbortSignal.timeout(options.timeout || 10000),
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return { data: await response.text(), status: response.status };
+  try {
+    const result = await task();
+    recordSourceSuccess(key);
+    return result;
+  } catch (error) {
+    recordSourceFailure(key);
+    throw error;
+  }
+}
+
+function fetch(url, options = {}) {
+  return withBreaker(breakerKey(url, options.label), () => withRetry(async () => {
+    let currentUrl = url;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+      const result = await withRequestSlot(() => sendRequest(currentUrl, options));
+      if (!result.redirect) return result;
+      currentUrl = result.redirect;
+    }
+    throw new Error('Too many redirects');
+  }, { attempts: options.retries ?? 2, label: options.label }));
+}
+
+async function fetchConfiguredFeed(feed, options = {}) {
+  const requestOptions = {
+    ...options,
+    timeout: feed.timeout || options.timeout,
+    headers: { ...feed.headers, ...options.headers },
+    label: feed.name,
+  };
+
+  if (!feed.nativeFetch) {
+    return fetch(feed.url, requestOptions);
+  }
+
+  return withBreaker(feed.name, () => withRetry(() => withRequestSlot(async () => {
+    const response = await globalThis.fetch(feed.url, {
+      headers: {
+        Accept: options.accept || '*/*',
+        'User-Agent': 'Mozilla/5.0',
+        ...requestOptions.headers,
+      },
+      signal: AbortSignal.timeout(requestOptions.timeout || DEFAULT_REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return { data: await response.text(), status: response.status };
+  }), { attempts: options.retries ?? 2, label: feed.name }));
 }
 
 function isSafePublicUrl(value) {
@@ -461,6 +692,22 @@ function parseGdeltDate(value) {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+// Resolves with `fallback` if `promise` has not settled within `budgetMs`. The original
+// promise keeps running so a slow source can still warm its own cache.
+const GDELT_POOL_BUDGET_MS = 6000;
+
+function withBudget(promise, budgetMs, fallback) {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(fallback), budgetMs);
+    timer.unref?.();
+    const settle = value => {
+      clearTimeout(timer);
+      resolve(value);
+    };
+    promise.then(settle, () => settle(fallback));
+  });
+}
+
 async function fetchGdeltArticles() {
   if (isCacheValid('gdelt')) return cache.gdelt.data;
   if (Date.now() < gdeltBackoffUntil) return cache.gdelt.data || [];
@@ -476,6 +723,10 @@ async function fetchGdeltArticles() {
     const { data } = await fetch(`https://api.gdeltproject.org/api/v2/doc/doc?${query}`, {
       accept: 'application/json',
       timeout: 12000,
+      // GDELT only supplements the pool, and headlines wait on it, so fail fast
+      // instead of spending a second full timeout on a retry.
+      retries: 1,
+      label: 'GDELT',
     });
     const document = JSON.parse(data);
     const result = (document.articles || []).flatMap(article => {
@@ -500,8 +751,11 @@ async function fetchGdeltArticles() {
     if (result.length > 0) cache.gdelt = { data: result, timestamp: Date.now() };
     return result.length > 0 ? result : cache.gdelt.data || [];
   } catch (err) {
-    console.error('[GDELT]', err.message);
-    if (/HTTP 429/.test(err.message)) gdeltBackoffUntil = Date.now() + 10 * 1000;
+    console.error('[GDELT]', describeError(err));
+    // A failed fetch leaves the cache empty, so without a real backoff every headline
+    // refresh re-queries GDELT and earns another 429 from an endpoint that asks for one
+    // request every five seconds. Rest for a full cache period instead.
+    if (/HTTP 429/.test(err.message)) gdeltBackoffUntil = Date.now() + CACHE_TTL.gdelt;
     return cache.gdelt.data || [];
   }
 }
@@ -523,8 +777,6 @@ async function loadHeadlinePool() {
       try {
         const { data } = await fetchConfiguredFeed(feed, {
           accept: 'application/rss+xml, application/xml, text/xml',
-          headers: feed.headers,
-          timeout: 10000,
         });
         const parsedItems = parseRSS(data, feed.name);
         let items = filterRecentItems(parsedItems, {
@@ -543,12 +795,15 @@ async function loadHeadlinePool() {
         console.log(`[DATA] ${feed.name}: ${items.length} items`);
         return items;
       } catch (err) {
-        console.error(`[DATA] ${feed.name} failed:`, err.message);
+        console.error(`[DATA] ${feed.name} failed:`, describeError(err));
         return [];
       }
     })
     ),
-    fetchGdeltArticles(),
+    // GDELT only supplements the RSS pool and keeps its own cache, so it must never
+    // hold the whole response open. Whatever it has not delivered inside the budget
+    // lands in its cache and joins the next refresh instead.
+    withBudget(fetchGdeltArticles(), GDELT_POOL_BUDGET_MS, []),
   ]);
 
   const allItems = [...rssResults.flat(), ...gdeltItems];
@@ -616,13 +871,12 @@ async function fetchTicker() {
   const feedResults = await Promise.all(
     RSS_FEEDS.ticker.map(async (feed) => {
       try {
-        const { data } = await fetch(feed.url, {
+        const { data } = await fetchConfiguredFeed(feed, {
           accept: 'application/rss+xml, application/xml, text/xml',
-          headers: feed.headers,
         });
         return filterRecentItems(parseRSS(data, feed.name), { maxAgeMs: CONTENT_MAX_AGE.ticker });
       } catch (err) {
-        console.error(`[DATA] Ticker ${feed.name} failed:`, err.message);
+        console.error(`[DATA] Ticker ${feed.name} failed:`, describeError(err));
         return [];
       }
     })
@@ -716,7 +970,7 @@ async function fetchMarkets() {
         const data = await fetchYahooQuote(symbol);
         return data ? { type: 'index', symbol: display, name, ...data } : null;
       } catch (err) {
-        console.error(`[DATA] ${symbol} failed:`, err.message);
+        console.error(`[DATA] ${symbol} failed:`, describeError(err));
         return null;
       }
     }),
@@ -725,7 +979,7 @@ async function fetchMarkets() {
         const data = await fetchYahooQuote(symbol);
         return data ? { type: 'mover', symbol, name, ...data } : null;
       } catch (err) {
-        console.error(`[DATA] ${symbol} failed:`, err.message);
+        console.error(`[DATA] ${symbol} failed:`, describeError(err));
         return null;
       }
     }),
@@ -787,7 +1041,7 @@ async function fetchYahooQuote(symbol) {
       changePercent: Math.round(changePercent * 100) / 100,
     };
   } catch (err) {
-    console.error(`[YAHOO] ${symbol}:`, err.message);
+    console.error(`[YAHOO] ${symbol}:`, describeError(err));
     return null;
   }
 }
@@ -824,7 +1078,7 @@ async function fetchCrypto() {
     cache.crypto = { data: result, timestamp: Date.now() };
     return result;
   } catch (err) {
-    console.error('[COINGECKO]', err.message);
+    console.error('[COINGECKO]', describeError(err));
     return cache.crypto.data || [];
   }
 }
@@ -897,7 +1151,7 @@ async function fetchMacroData() {
     try {
       return await fetchFredSeries(item);
     } catch (err) {
-      console.error(`[FRED] ${item.id} failed:`, err.message);
+      console.error(`[FRED] ${item.id} failed:`, describeError(err));
       return null;
     }
   }));
@@ -952,7 +1206,7 @@ async function geocodeZip(zip) {
       return result;
     }
   } catch (err) {
-    console.error('[GEO] Nominatim failed:', err.message);
+    console.error('[GEO] Nominatim failed:', describeError(err));
   }
 
   return null;
@@ -1026,7 +1280,7 @@ async function fetchNWSWeather(lat, lon) {
           }
         }
       } catch (err) {
-        console.error('[NWS] Observation fetch failed:', err.message);
+        console.error('[NWS] Observation fetch failed:', describeError(err));
       }
     }
 
@@ -1081,7 +1335,7 @@ async function fetchNWSWeather(lat, lon) {
       forecast: dailyForecast,
     };
   } catch (err) {
-    console.error('[NWS] Weather fetch failed:', err.message);
+    console.error('[NWS] Weather fetch failed:', describeError(err));
     return null;
   }
 }
@@ -1138,7 +1392,7 @@ async function fetchRadarData() {
       generated: json.generated,
     };
   } catch (err) {
-    console.error('[RADAR] Failed to fetch radar data:', err.message);
+    console.error('[RADAR] Failed to fetch radar data:', describeError(err));
     return null;
   }
 }
@@ -1321,7 +1575,7 @@ async function fetchKalshiDirect() {
       .slice(0, 25);
     return result;
   } catch (err) {
-    console.error('[KALSHI]', err.message);
+    console.error('[KALSHI]', describeError(err));
     return [];
   }
 }
@@ -1348,7 +1602,7 @@ async function fetchPolymarketDirect() {
     }
     return result.length > 0 ? result : cache.polymarket.data || [];
   } catch (err) {
-    console.error('[POLYMARKET]', err.message);
+    console.error('[POLYMARKET]', describeError(err));
     return cache.polymarket.data || [];
   }
 }
@@ -1447,7 +1701,7 @@ async function fetchPizzintWatch() {
     }
     return result.length > 0 ? result : cache.pizzint.data || [];
   } catch (err) {
-    console.error('[PIZZINT]', err.message);
+    console.error('[PIZZINT]', describeError(err));
     return cache.pizzint.data || [];
   }
 }
@@ -1544,9 +1798,8 @@ async function fetchTechNews() {
   const feedResults = await Promise.all(
     RSS_FEEDS.tech.map(async (feed) => {
       try {
-        const { data } = await fetch(feed.url, {
+        const { data } = await fetchConfiguredFeed(feed, {
           accept: 'application/rss+xml, application/xml, text/xml',
-          headers: feed.headers,
         });
         const parsedItems = parseRSS(data, feed.name);
         let items = filterRecentItems(parsedItems, {
@@ -1565,7 +1818,7 @@ async function fetchTechNews() {
         console.log(`[DATA] ${feed.name}: ${items.length} items`);
         return items;
       } catch (err) {
-        console.error(`[DATA] ${feed.name} failed:`, err.message);
+        console.error(`[DATA] ${feed.name} failed:`, describeError(err));
         return [];
       }
     })
@@ -1609,9 +1862,8 @@ async function loadSciencePool() {
   const feedResults = await Promise.all(
     RSS_FEEDS.science.map(async feed => {
       try {
-        const { data } = await fetch(feed.url, {
+        const { data } = await fetchConfiguredFeed(feed, {
           accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
-          headers: feed.headers,
         });
         const parsedItems = parseRSS(data, feed.name);
         let items = filterRecentItems(parsedItems, {
@@ -1630,7 +1882,7 @@ async function loadSciencePool() {
         console.log(`[DATA] ${feed.name}: ${items.length} science items`);
         return items;
       } catch (err) {
-        console.error(`[DATA] ${feed.name} failed:`, err.message);
+        console.error(`[DATA] ${feed.name} failed:`, describeError(err));
         return [];
       }
     })
@@ -1692,10 +1944,8 @@ async function loadLocalPool() {
   const feedResults = await Promise.all(
     RSS_FEEDS.local.map(async feed => {
       try {
-        const { data } = await fetch(feed.url, {
+        const { data } = await fetchConfiguredFeed(feed, {
           accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
-          headers: feed.headers,
-          timeout: 10000,
         });
         const parsedItems = feed.parser === 'alexandria-html'
           ? parseAlexandriaNews(data, feed.name, feed.url)
@@ -1707,7 +1957,7 @@ async function loadLocalPool() {
         console.log(`[DATA] Local ${feed.name}: ${items.length} items`);
         return items;
       } catch (err) {
-        console.error(`[DATA] Local ${feed.name} failed:`, err.message);
+        console.error(`[DATA] Local ${feed.name} failed:`, describeError(err));
         return [];
       }
     })
@@ -1791,7 +2041,7 @@ async function fetchCustomFeeds(definitions) {
       const { data } = await fetch(feed.url, {
         accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
         headers: { 'User-Agent': 'BlakeNewsNow/0.4 (user RSS feed)' },
-        timeout: 10000,
+        label: `Custom ${feed.name}`,
       });
       const items = filterRecentItems(parseRSS(data, feed.name), {
         maxAgeMs: CONTENT_MAX_AGE.headlines,
@@ -1805,7 +2055,7 @@ async function fetchCustomFeeds(definitions) {
         description: item.description,
       }));
     } catch (err) {
-      console.error(`[DATA] Custom ${feed.name} failed:`, err.message);
+      console.error(`[DATA] Custom ${feed.name} failed:`, describeError(err));
       return [];
     }
   }));
@@ -1880,7 +2130,7 @@ async function fetchLemmy() {
         console.log(`[LEMMY] c/${community}: ${posts.length} current posts`);
         return posts;
       } catch (err) {
-        console.error(`[LEMMY] c/${community} failed:`, err.message);
+        console.error(`[LEMMY] c/${community} failed:`, describeError(err));
         return [];
       }
     })
@@ -2028,7 +2278,7 @@ async function fetchOpenSocial() {
         console.log(`[SOCIAL] Bluesky Discover: ${posts.length} current posts`);
         return posts;
       } catch (err) {
-        console.error('[SOCIAL] Bluesky Discover failed:', err.message);
+        console.error('[SOCIAL] Bluesky Discover failed:', describeError(err));
         return [];
       }
     })(),
@@ -2044,7 +2294,7 @@ async function fetchOpenSocial() {
         console.log(`[SOCIAL] Mastodon Trending: ${links.length} current links`);
         return links;
       } catch (err) {
-        console.error('[SOCIAL] Mastodon Trending failed:', err.message);
+        console.error('[SOCIAL] Mastodon Trending failed:', describeError(err));
         return [];
       }
     })(),
@@ -2115,7 +2365,7 @@ async function fetchHackerNews() {
     cache.hackernews = { data: result, timestamp: Date.now() };
     return result;
   } catch (err) {
-    console.error('[HN]', err.message);
+    console.error('[HN]', describeError(err));
     return cache.hackernews.data || [];
   }
 }
@@ -2172,7 +2422,7 @@ async function fetchFourChan() {
       }
       console.log(`[4CHAN] /${board}/: ${allThreads.length} threads (filtered)`);
     } catch (err) {
-      console.error(`[4CHAN] /${board}/ failed:`, err.message);
+      console.error(`[4CHAN] /${board}/ failed:`, describeError(err));
     }
   }
 
@@ -2372,6 +2622,18 @@ function registerRoutes(app) {
 
 module.exports = {
   RSS_FEEDS,
+  describeError,
+  isRetryableError,
+  // Exposed so the breaker state machine can be exercised without live network calls.
+  sourceBreaker: {
+    cooldownRemaining: breakerCooldownRemaining,
+    recordFailure: recordSourceFailure,
+    recordSuccess: recordSourceSuccess,
+    reset: () => sourceHealth.clear(),
+    BREAKER_THRESHOLD,
+    BREAKER_BASE_COOLDOWN_MS,
+    BREAKER_MAX_COOLDOWN_MS,
+  },
   normalizePolymarketMarket,
   normalizeKalshiMarket,
   selectDiverseItems,
