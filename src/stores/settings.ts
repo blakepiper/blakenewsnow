@@ -130,6 +130,7 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: '4chan-news', name: '4chan /news/', apiSources: ['/news/'], enabled: true, category: 'social', priority: 43 },
   { id: '4chan-pol', name: '4chan /pol/', apiSources: ['/pol/'], enabled: true, category: 'social', priority: 44 },
   { id: '4chan-lit', name: '4chan /lit/', apiSources: ['/lit/'], enabled: true, category: 'social', priority: 45 },
+  { id: '4chan-his', name: '4chan /his/', apiSources: ['/his/'], enabled: true, category: 'social', priority: 46 },
   // Science news
   { id: 'science-daily', name: 'ScienceDaily', enabled: true, category: 'science', priority: 46 },
   { id: 'phys-org', name: 'Phys.org', enabled: true, category: 'science', priority: 47 },

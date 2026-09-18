@@ -119,7 +119,7 @@ The reader is deliberately separate from the publisher page. It only returns ext
 | Science news | ScienceDaily, Phys.org, Science News, Live Science, Quanta Magazine, NASA, AAAS Science News, APS Psychology, Neuroscience News Psychology, Carbon Brief, Mongabay, STAT, WHO, Undark, USGS Earthquakes |
 | Scientific journals | Nature, Science, PNAS, Cell, Science Advances, eLife, PLOS ONE, The Lancet, NEJM, Frontiers in Psychology, Human Factors, Ergonomics |
 | Local — DC and Alexandria | WTOP, WAMU, Alexandria City, Alexandria Times, ALXnow, Virginia Mercury, Washington Post Local, DC News Now, Washington City Paper, Washington Blade |
-| Social | Lemmy communities, Bluesky Discover, Mastodon trending links, 4chan `/news/`, `/pol/`, and `/lit/` |
+| Social | Lemmy communities, Bluesky Discover, Mastodon trending links, 4chan `/news/`, `/pol/`, `/lit/`, and `/his/` |
 | Markets and macro | Yahoo Finance, CoinGecko, FRED |
 | Predictions | Polymarket, Kalshi, pizzint.watch |
 | Weather | National Weather Service, RainViewer |

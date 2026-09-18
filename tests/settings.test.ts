@@ -24,6 +24,7 @@ test('includes credential-free federated and open social sources', () => {
     'lemmy-science',
     'bluesky-discover',
     'mastodon-trending',
+    '4chan-his',
   ]) {
     assert.equal(sources.get(id)?.enabled, true);
     assert.equal(sources.get(id)?.category, 'social');
