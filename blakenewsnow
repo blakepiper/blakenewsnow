@@ -59,14 +59,27 @@ ENV_NODE_MODULES="$ENV_DIR/node_modules"
 NODE_MODULES_LINK="$ROOT_DIR/node_modules"
 CONCURRENTLY_BIN="$ENV_DIR/node_modules/.bin/concurrently"
 VITE_BIN="$ENV_DIR/node_modules/.bin/vite"
+FRONTEND_URL="${BLAKENEWSNOW_FRONTEND_URL:-http://localhost:3000}"
 
 LINK_CREATED=0
+SERVICES_PID=0
+BROWSER_WAITER_PID=0
 
 # The function is invoked indirectly by the EXIT trap.
 # shellcheck disable=SC2329
 cleanup() {
   local status=$?
   trap - EXIT INT TERM
+
+  if (( BROWSER_WAITER_PID > 0 )); then
+    kill -TERM "$BROWSER_WAITER_PID" 2>/dev/null || true
+    wait "$BROWSER_WAITER_PID" 2>/dev/null || true
+  fi
+
+  if (( SERVICES_PID > 0 )); then
+    kill -TERM "$SERVICES_PID" 2>/dev/null || true
+    wait "$SERVICES_PID" 2>/dev/null || true
+  fi
 
   if (( LINK_CREATED == 1 )) && [[ -L "$NODE_MODULES_LINK" ]]; then
     if [[ "$(readlink "$NODE_MODULES_LINK" 2>/dev/null || true)" == "$ENV_NODE_MODULES" ]]; then
@@ -123,6 +136,72 @@ fi
 [[ -x "$CONCURRENTLY_BIN" ]] || die 'concurrently was not installed in the project-local environment'
 [[ -x "$VITE_BIN" ]] || die 'vite was not installed in the project-local environment'
 
+frontend_ready() {
+  BLAKENEWSNOW_FRONTEND_URL="$FRONTEND_URL" node -e '
+    const target = new URL(process.env.BLAKENEWSNOW_FRONTEND_URL)
+    if (target.hostname === "localhost") target.hostname = "127.0.0.1"
+
+    const http = require(target.protocol === "https:" ? "https" : "http")
+    const request = http.get(target, response => {
+      response.resume()
+      response.once("end", () => {
+        process.exit(response.statusCode >= 200 && response.statusCode < 500 ? 0 : 1)
+      })
+    })
+    request.setTimeout(500, () => {
+      request.destroy()
+      process.exit(1)
+    })
+    request.on("error", () => process.exit(1))
+  ' >/dev/null 2>&1
+}
+
+open_browser() {
+  if command -v wslview >/dev/null 2>&1; then
+    wslview "$FRONTEND_URL" >/dev/null 2>&1 &
+    return
+  fi
+
+  if [[ "$(uname -s)" == Darwin* ]] && command -v open >/dev/null 2>&1; then
+    open "$FRONTEND_URL" >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$FRONTEND_URL" >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v open >/dev/null 2>&1; then
+    open "$FRONTEND_URL" >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v cmd.exe >/dev/null 2>&1; then
+    cmd.exe /c start "" "$FRONTEND_URL" >/dev/null 2>&1 &
+    return
+  fi
+
+  echo "blakenewsnow: no default-browser opener found; open $FRONTEND_URL manually" >&2
+}
+
+open_browser_when_ready() {
+  local attempt
+  for (( attempt = 0; attempt < 120; attempt++ )); do
+    if ! kill -0 "$SERVICES_PID" 2>/dev/null; then
+      return 0
+    fi
+    if frontend_ready; then
+      echo "blakenewsnow: opening $FRONTEND_URL"
+      open_browser
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo "blakenewsnow: frontend did not become ready; open $FRONTEND_URL manually" >&2
+}
+
 if [[ -e "$NODE_MODULES_LINK" || -L "$NODE_MODULES_LINK" ]]; then
   if [[ -L "$NODE_MODULES_LINK" && "$(readlink "$NODE_MODULES_LINK" 2>/dev/null || true)" == "$ENV_NODE_MODULES" ]]; then
     rm -f -- "$NODE_MODULES_LINK"
@@ -139,12 +218,20 @@ export NODE_PATH="$ENV_DIR/node_modules${NODE_PATH:+:$NODE_PATH}"
 
 cd "$ROOT_DIR"
 
-status=0
 "$CONCURRENTLY_BIN" \
   --kill-others \
   --names api,web \
   --prefix-colors blue,green \
   'node server/proxy.cjs' \
-  "vite --config \"$ENV_VITE_CONFIG\"" || status=$?
+  "vite --config \"$ENV_VITE_CONFIG\"" &
+SERVICES_PID=$!
+
+if [[ "${BLAKENEWSNOW_OPEN_BROWSER:-1}" != 0 ]]; then
+  open_browser_when_ready &
+  BROWSER_WAITER_PID=$!
+fi
+
+status=0
+wait "$SERVICES_PID" || status=$?
 
 exit "$status"

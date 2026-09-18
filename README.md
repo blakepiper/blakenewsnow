@@ -56,7 +56,9 @@ cd blakenewsnow
 The launcher keeps an incremental project-local environment in
 `.blakenewsnow-venv/`. It installs dependencies there on first use, updates
 that environment when the manifest or lockfile changes, and stops both the API
-and frontend together when interrupted with Ctrl+C.
+and frontend together when interrupted with Ctrl+C. Once the frontend is ready,
+it opens `http://localhost:3000` in the default browser; set
+`BLAKENEWSNOW_OPEN_BROWSER=0` to disable that behavior.
 
 Open [http://localhost:3000](http://localhost:3000). The Vite frontend runs on port `3000` and the Express API runs on port `3001`.
 
