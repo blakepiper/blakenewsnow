@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+# This is a project-local Node environment, not a Python virtualenv. It keeps
+# the installed packages in a reusable directory and exposes them through a
+# temporary node_modules symlink while the app runs. Ctrl+C stops the child
+# processes and removes that symlink; the environment itself is retained so
+# the next launch can update it incrementally.
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+ENV_DIR="${BLAKENEWSNOW_ENV_DIR:-$ROOT_DIR/.blakenewsnow-venv}"
+
+if [[ "$ENV_DIR" != /* ]]; then
+  ENV_DIR="$ROOT_DIR/$ENV_DIR"
+fi
+
+die() {
+  echo "blakenewsnow: $*" >&2
+  exit 1
+}
+
+[[ "$ENV_DIR" != "$ROOT_DIR" ]] || die 'BLAKENEWSNOW_ENV_DIR cannot be the project root'
+[[ -f "$ROOT_DIR/package.json" ]] || die 'package.json was not found'
+[[ -f "$ROOT_DIR/package-lock.json" ]] || die 'package-lock.json was not found'
+[[ -f "$ROOT_DIR/vite.config.ts" ]] || die 'vite.config.ts was not found'
+
+command -v node >/dev/null 2>&1 || die 'Node.js is required (see .nvmrc)'
+command -v npm >/dev/null 2>&1 || die 'npm is required'
+
+if ! node -e '
+  const [major, minor] = process.versions.node.split(".").map(Number)
+  const supported = (major === 24 && minor >= 18) || major >= 26
+  process.exit(supported ? 0 : 1)
+'; then
+  die "unsupported Node.js version $(node --version); use Node 24.18+ or Node 26+"
+fi
+
+NPM_MAJOR="$(npm --version | cut -d. -f1)"
+if [[ ! "$NPM_MAJOR" =~ ^[0-9]+$ ]] || (( NPM_MAJOR < 11 )); then
+  die "npm 11+ is required for the native-package lock metadata (found npm $(npm --version))"
+fi
+
+file_hash() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  else
+    shasum -a 256 "$1" | cut -d' ' -f1
+  fi
+}
+
+mkdir -p "$ENV_DIR"
+
+STATE_FILE="$ENV_DIR/.state"
+ENV_PACKAGE_JSON="$ENV_DIR/package.json"
+ENV_PACKAGE_LOCK="$ENV_DIR/package-lock.json"
+ENV_VITE_CONFIG="$ENV_DIR/vite.config.ts"
+ENV_NODE_MODULES="$ENV_DIR/node_modules"
+NODE_MODULES_LINK="$ROOT_DIR/node_modules"
+CONCURRENTLY_BIN="$ENV_DIR/node_modules/.bin/concurrently"
+VITE_BIN="$ENV_DIR/node_modules/.bin/vite"
+
+LINK_CREATED=0
+
+# The function is invoked indirectly by the EXIT trap.
+# shellcheck disable=SC2329
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+
+  if (( LINK_CREATED == 1 )) && [[ -L "$NODE_MODULES_LINK" ]]; then
+    if [[ "$(readlink "$NODE_MODULES_LINK" 2>/dev/null || true)" == "$ENV_NODE_MODULES" ]]; then
+      rm -f -- "$NODE_MODULES_LINK"
+    fi
+  fi
+
+  exit "$status"
+}
+
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap cleanup EXIT
+
+STATE="$(
+  printf 'node=%s\n' "$(node --version)"
+  printf 'npm=%s\n' "$(npm --version)"
+  printf 'platform=%s/%s\n' "$(node -p 'process.platform')" "$(node -p 'process.arch')"
+  printf 'package=%s\n' "$(file_hash "$ROOT_DIR/package.json")"
+  printf 'lock=%s\n' "$(file_hash "$ROOT_DIR/package-lock.json")"
+)"
+
+STATE_MATCH=0
+if [[ -s "$STATE_FILE" ]] && [[ "$(<"$STATE_FILE")" == "$STATE" ]]; then
+  STATE_MATCH=1
+fi
+
+if (( STATE_MATCH == 0 )) || [[ ! -x "$CONCURRENTLY_BIN" || ! -x "$VITE_BIN" ]]; then
+  echo "blakenewsnow: updating project-local environment in $ENV_DIR"
+  cp "$ROOT_DIR/package.json" "$ENV_PACKAGE_JSON"
+  cp "$ROOT_DIR/package-lock.json" "$ENV_PACKAGE_LOCK"
+  cp "$ROOT_DIR/vite.config.ts" "$ENV_VITE_CONFIG"
+
+  if [[ -d "$ENV_DIR/node_modules" ]]; then
+    npm install \
+      --prefix "$ENV_DIR" \
+      --ignore-scripts \
+      --no-audit \
+      --no-fund
+  else
+    npm ci \
+      --prefix "$ENV_DIR" \
+      --ignore-scripts \
+      --no-audit \
+      --no-fund
+  fi
+
+  printf '%s\n' "$STATE" > "$STATE_FILE"
+else
+  cp "$ROOT_DIR/vite.config.ts" "$ENV_VITE_CONFIG"
+  echo "blakenewsnow: reusing project-local environment in $ENV_DIR"
+fi
+
+[[ -x "$CONCURRENTLY_BIN" ]] || die 'concurrently was not installed in the project-local environment'
+[[ -x "$VITE_BIN" ]] || die 'vite was not installed in the project-local environment'
+
+if [[ -e "$NODE_MODULES_LINK" || -L "$NODE_MODULES_LINK" ]]; then
+  if [[ -L "$NODE_MODULES_LINK" && "$(readlink "$NODE_MODULES_LINK" 2>/dev/null || true)" == "$ENV_NODE_MODULES" ]]; then
+    rm -f -- "$NODE_MODULES_LINK"
+  else
+    die "$NODE_MODULES_LINK already exists; remove it or set up the launcher without a repository node_modules directory"
+  fi
+fi
+
+ln -s "$ENV_NODE_MODULES" "$NODE_MODULES_LINK"
+LINK_CREATED=1
+
+export PATH="$ENV_DIR/node_modules/.bin:$PATH"
+export NODE_PATH="$ENV_DIR/node_modules${NODE_PATH:+:$NODE_PATH}"
+
+cd "$ROOT_DIR"
+
+status=0
+"$CONCURRENTLY_BIN" \
+  --kill-others \
+  --names api,web \
+  --prefix-colors blue,green \
+  'node server/proxy.cjs' \
+  "vite --config \"$ENV_VITE_CONFIG\"" || status=$?
+
+exit "$status"

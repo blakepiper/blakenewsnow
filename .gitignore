@@ -21,6 +21,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.blakenewsnow-venv
 dist
 dist-ssr
 *.local

@@ -43,16 +43,20 @@ The application is self-hosted and credential-free by default. Its **What's Happ
 ### Requirements
 
 - Node.js 24.18 LTS or Node.js 26+
-- npm 10 or newer
+- npm 11 or newer
 
 ### Run locally
 
 ```bash
 git clone https://github.com/blakepiper/blakenewsnow.git
 cd blakenewsnow
-npm install
-npm start
+./blakenewsnow
 ```
+
+The launcher keeps an incremental project-local environment in
+`.blakenewsnow-venv/`. It installs dependencies there on first use, updates
+that environment when the manifest or lockfile changes, and stops both the API
+and frontend together when interrupted with Ctrl+C.
 
 Open [http://localhost:3000](http://localhost:3000). The Vite frontend runs on port `3000` and the Express API runs on port `3001`.
 
