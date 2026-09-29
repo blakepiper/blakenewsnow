@@ -76,8 +76,9 @@ npm start
 
 The manifest supplies Node.js 24.18.0 (including npm), Bash, coreutils, and
 CA certificates. Use a Guix channel that provides this Node version; run
-`guix pull` if your package definitions are older. Open
-[http://localhost:3000](http://localhost:3000) after the servers start.
+`guix pull` if your package definitions are older. `npm start` automatically
+opens the app in your default browser once the frontend is ready. Set
+`BROWSER=none` to skip opening the browser (for example, `BROWSER=none npm start`).
 
 For the project-local launcher described above, use
 `guix shell -m manifest.scm -- ./blakenewsnow` instead of `npm ci` and
@@ -102,7 +103,7 @@ Location, source selections, read state, and pane dimensions are stored locally 
 
 | Command | Purpose |
 |---|---|
-| `npm start` | Run the API and frontend development servers |
+| `npm start` | Run the API and frontend development servers and open the app in the default browser |
 | `npm run dev` | Run the Vite frontend only |
 | `npm run server` | Run the Express API only |
 | `npm run server:watch` | Run the API with automatic restarts |
