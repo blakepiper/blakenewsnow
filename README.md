@@ -64,6 +64,26 @@ Open [http://localhost:3000](http://localhost:3000). The Vite frontend runs on p
 
 No API keys or paid services are required for the currently configured integrations. Public endpoints may still impose their own rate limits or availability rules.
 
+### Run with Guix
+
+From the repository root:
+
+```bash
+guix shell -m manifest.scm
+npm ci
+npm start
+```
+
+The manifest supplies Node.js 24.18.0 (including npm), Bash, coreutils, and
+CA certificates. Use a Guix channel that provides this Node version; run
+`guix pull` if your package definitions are older. Open
+[http://localhost:3000](http://localhost:3000) after the servers start.
+
+For the project-local launcher described above, use
+`guix shell -m manifest.scm -- ./blakenewsnow` instead of `npm ci` and
+`npm start`. The launcher requires that the repository has no existing
+`node_modules` directory.
+
 ## Configuration
 
 Runtime configuration is provided through environment variables:

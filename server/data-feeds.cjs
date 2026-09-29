@@ -2380,7 +2380,7 @@ async function fetchFourChan() {
 
   console.log('[DATA] Fetching 4chan...');
 
-  const boards = ['news', 'pol', 'lit', 'his'];
+  const boards = ['news', 'pol', 'lit', 'his', 'g'];
   const allThreads = [];
 
   // Fetch boards sequentially to respect 4chan rate limit (1 req/sec)

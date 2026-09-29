@@ -4,6 +4,8 @@ Repository guidance for coding agents.
 
 ## Development
 
+On Guix, enter the development environment with `guix shell -m manifest.scm`.
+
 ```bash
 npm install
 npm start
@@ -60,7 +62,7 @@ server/
 - Bluesky: public Discover feed
 - Mastodon: public trending links
 - Hacker News
-- 4chan: `/news/`, `/pol/`, `/lit/`
+- 4chan: `/news/`, `/pol/`, `/lit/`, `/his/`, `/g/` (Technology)
 
 Social sources must remain individually selectable in `src/stores/settings.ts`, normalized to
 the shared feed shape, and covered by deterministic tests.

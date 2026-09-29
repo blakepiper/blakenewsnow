@@ -31,6 +31,16 @@ test('includes credential-free federated and open social sources', () => {
   }
 });
 
+test('includes 4chan /g/ as an enabled technology source with its API alias', () => {
+  const source = DEFAULT_SETTINGS.sources.find(source => source.id === '4chan-g');
+  assert.equal(source?.enabled, true);
+  assert.equal(source?.category, 'tech');
+  assert.deepEqual(source?.apiSources, ['/g/']);
+  assert.equal(getSourceCategory('/g/'), 'tech');
+  assert.equal(getSourceCategory('4chan /g/'), 'tech');
+  assert.equal(getSourceCategory('/his/'), 'social');
+});
+
 test('includes science news outlets and journals as enabled science sources', () => {
   const sources = new Map(DEFAULT_SETTINGS.sources.map(source => [source.id, source]));
 

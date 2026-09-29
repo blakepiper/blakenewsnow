@@ -241,7 +241,7 @@ export function useUnifiedFeed(
           id: t.id,
           title: t.title,
           source: t.source,
-          sourceType: 'social',
+          sourceType: getSourceCategory(t.source),
           category: t.source,
           timestamp: t.timestamp,
           link: t.url,

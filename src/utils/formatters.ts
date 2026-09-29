@@ -144,6 +144,8 @@ export function getSourceColor(source: string): string {
 export function getSourceCategory(source: string): 'news' | 'tech' | 'science' | 'social' | 'local' {
   const techSources = [
     'Hacker News',
+    '/g/',
+    '4chan /g/',
     'Ars Technica',
     'The Verge',
     'TechCrunch',

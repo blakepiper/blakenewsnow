@@ -98,6 +98,7 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'icij', name: 'ICIJ', enabled: true, category: 'news', priority: 50 },
   { id: 'bellingcat', name: 'Bellingcat', enabled: true, category: 'news', priority: 51 },
   // Tech
+  { id: '4chan-g', name: '4chan /g/', apiSources: ['/g/'], enabled: true, category: 'tech', priority: 77 },
   { id: 'hackernews', name: 'Hacker News', enabled: true, category: 'tech', priority: 52 },
   { id: 'arstechnica', name: 'Ars Technica', enabled: true, category: 'tech', priority: 53 },
   { id: 'theverge', name: 'The Verge', enabled: true, category: 'tech', priority: 54 },
