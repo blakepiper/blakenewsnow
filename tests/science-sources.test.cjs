@@ -32,7 +32,6 @@ const JOURNALS = [
   'STAT',
   'WHO',
   'Undark',
-  'USGS Earthquakes',
 ];
 
 test('configures a distinct mix of science reporting and primary journals', () => {

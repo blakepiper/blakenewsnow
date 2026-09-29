@@ -125,7 +125,6 @@ export function getSourceColor(source: string): string {
     'STAT': 'bg-pink-600',
     'WHO': 'bg-blue-600',
     'Undark': 'bg-slate-600',
-    'USGS Earthquakes': 'bg-yellow-700',
     'WTOP': 'bg-blue-700',
     'WAMU': 'bg-purple-700',
     'Alexandria City': 'bg-cyan-700',
@@ -194,7 +193,6 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'science' |
     'STAT',
     'WHO',
     'Undark',
-    'USGS Earthquakes',
   ];
   const localSources = [
     'WTOP',

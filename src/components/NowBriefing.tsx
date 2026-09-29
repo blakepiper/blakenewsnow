@@ -14,7 +14,6 @@ interface NowBriefingProps {
 const BriefingRoot = styled('section')({
   gridColumn: '1 / -1',
   borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-  background: 'linear-gradient(180deg, rgba(18, 30, 37, 0.98), rgba(10, 10, 10, 0.98))',
 });
 
 const BriefingGrid = styled('div')({
@@ -35,7 +34,7 @@ const BriefingStory = styled(ButtonBase)(({ theme }) => ({
   borderRight: '1px solid rgba(255, 255, 255, 0.05)',
   borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
   '&:hover': {
-    background: 'rgba(130, 170, 190, 0.07)',
+    background: 'rgba(255, 255, 255, 0.05)',
   },
   '&:focus-visible': {
     outline: `1px solid ${theme.palette.primary.main}`,
@@ -47,26 +46,6 @@ const StoryInner = styled('span')({
   minWidth: 0,
   width: '100%',
 });
-
-const StoryTopline = styled('span')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  marginBottom: 3,
-  color: theme.palette.text.secondary,
-  fontSize: 9,
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-}));
-
-const StoryRank = styled('span')(({ theme }) => ({
-  color: theme.palette.secondary.main,
-  fontVariantNumeric: 'tabular-nums',
-}));
-
-const StoryCoverage = styled('span')(({ theme }) => ({
-  color: theme.palette.primary.light,
-}));
 
 const StoryHeadline = styled('span')({
   display: '-webkit-box',
@@ -110,7 +89,7 @@ export function NowBriefing({ items, onPreview }: NowBriefingProps) {
     <BriefingRoot aria-label="Top stories">
       {briefing.clusters.length > 0 ? (
         <BriefingGrid>
-          {briefing.clusters.map((cluster, index) => (
+          {briefing.clusters.map((cluster) => (
             <BriefingStory
               key={cluster.id}
               onClick={() => {
@@ -119,22 +98,12 @@ export function NowBriefing({ items, onPreview }: NowBriefingProps) {
               }}
             >
               <StoryInner>
-                <StoryTopline>
-                  <StoryRank>0{index + 1}</StoryRank>
-                  <StoryCoverage>{cluster.coverage}</StoryCoverage>
-                  <span>
-                    {cluster.independentReportCount} independent
-                  </span>
-                  {cluster.publisherCount > cluster.independentReportCount && (
-                    <span>{cluster.publisherCount} outlets</span>
-                  )}
-                  <span>{formatTimeAgo(cluster.timestamp)}</span>
-                </StoryTopline>
                 <StoryHeadline>
                   {cluster.headline}
                   <OpenIcon />
                 </StoryHeadline>
                 <StorySources>
+                  {formatTimeAgo(cluster.timestamp)}{' · '}
                   {cluster.sources.slice(0, 4).join(' + ')}
                   {cluster.sources.length > 4 ? ` +${cluster.sources.length - 4}` : ''}
                   {cluster.keywords.length > 0 ? ` / ${cluster.keywords.join(' · ')}` : ''}

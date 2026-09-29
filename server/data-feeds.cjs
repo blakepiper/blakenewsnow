@@ -236,7 +236,6 @@ const RSS_FEEDS = {
     { name: 'STAT', url: 'https://www.statnews.com/feed/' },
     { name: 'WHO', url: 'https://www.who.int/rss-feeds/news-english.xml', maxAgeMs: 365 * 24 * 60 * 60 * 1000 },
     { name: 'Undark', url: 'https://undark.org/feed/' },
-    { name: 'USGS Earthquakes', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.atom' },
   ],
   local: [
     { name: 'WTOP', url: 'https://wtop.com/feed/', filter: localFeedFilter },

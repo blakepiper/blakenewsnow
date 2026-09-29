@@ -161,7 +161,6 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'stat', name: 'STAT', enabled: true, category: 'science', priority: 79 },
   { id: 'who', name: 'WHO', enabled: true, category: 'science', priority: 80 },
   { id: 'undark', name: 'Undark', enabled: true, category: 'science', priority: 81 },
-  { id: 'usgs-earthquakes', name: 'USGS Earthquakes', enabled: true, category: 'science', priority: 82 },
   // Local news for Washington, DC and Alexandria
   { id: 'wtop', name: 'WTOP', enabled: true, category: 'local', priority: 83 },
   { id: 'wamu', name: 'WAMU', enabled: true, category: 'local', priority: 84 },
