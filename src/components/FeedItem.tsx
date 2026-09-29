@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { FeedItem as FeedItemType } from '../types';
-import { formatTimeAgo, formatScore, getSourceColor, getCategoryDotColor } from '../utils/formatters';
+import { formatTimeAgo, formatScore } from '../utils/formatters';
+import { SourceChip } from './SourceChip';
 
 interface FeedItemProps {
   item: FeedItemType;
@@ -35,13 +36,10 @@ export function FeedItem({
     >
       {/* Desktop: single dense line */}
       <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 text-xs leading-tight">
-        {/* Category dot */}
-        <span className={`w-1 h-1 rounded-full shrink-0 ${getCategoryDotColor(item.sourceType)}`} />
-
         {/* Source badge */}
-        <span className={`shrink-0 text-[10px] px-1 py-px rounded ${getSourceColor(item.source)} text-white/90 font-medium`}>
+        <SourceChip source={item.source} className="shrink-0 text-[10px] px-1 py-px rounded font-medium">
           {item.source.length > 12 ? item.source.slice(0, 10) + '..' : item.source}
-        </span>
+        </SourceChip>
 
         {/* Score (social/HN) */}
         {item.score != null && (
@@ -77,13 +75,10 @@ export function FeedItem({
 
         {/* Meta row */}
         <div className="flex items-center gap-2 text-[11px]">
-          {/* Category dot */}
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getCategoryDotColor(item.sourceType)}`} />
-
           {/* Source badge */}
-          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getSourceColor(item.source)} text-white/90`}>
+          <SourceChip source={item.source} className="px-1.5 py-0.5 rounded text-[10px] font-medium">
             {item.source}
-          </span>
+          </SourceChip>
 
           {/* Score */}
           {item.score != null && (

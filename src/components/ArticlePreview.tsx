@@ -19,7 +19,8 @@ import {
   type ArticlePreviewDocument,
   type ReadableArticleRecommendation,
 } from '../ml/articleRecommendations';
-import { formatTimeAgo, getSourceColor } from '../utils/formatters';
+import { formatTimeAgo } from '../utils/formatters';
+import { SourceChip } from './SourceChip';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface ArticlePreviewProps {
@@ -66,11 +67,10 @@ const ReaderLogo = styled('img')({
   },
 });
 
-const SourceBadge = styled('span')({
+const SourceBadge = styled(SourceChip)({
   maxWidth: 130,
   padding: '2px 6px',
   borderRadius: 3,
-  color: 'rgba(255,255,255,0.9)',
   fontSize: 10,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -450,11 +450,11 @@ export function ArticlePreview({ item, alternatives, onClose }: ArticlePreviewPr
         <>
           <ReaderTopbar>
             <ReaderLogo src="/brand-logo.png" alt="Blake News Now" />
-            <SourceBadge className={getSourceColor(item.source)}>{item.source}</SourceBadge>
+            <SourceBadge source={item.source}>{item.source}</SourceBadge>
             {usingAlternative && readerItem && (
               <>
                 <SourceArrow>→</SourceArrow>
-                <SourceBadge className={getSourceColor(readerItem.source)}>
+                <SourceBadge source={readerItem.source}>
                   {readerItem.source}
                 </SourceBadge>
               </>

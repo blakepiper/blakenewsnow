@@ -144,8 +144,7 @@ export function Weather({ zip = '22314' }: WeatherProps) {
     return () => clearInterval(interval);
   }, [radar, radarPlaying]);
 
-  // Load base map tiles — light CartoDB tiles tinted down for dark UI
-  // light_all gives readable roads/labels/geography that actually shows up
+  // Load OpenStreetMap tiles directly so browser caching and referrers are preserved.
   useEffect(() => {
     if (!weather) return;
     loadedBaseRef.current = false;
@@ -180,7 +179,7 @@ export function Weather({ zip = '22314' }: WeatherProps) {
             drawRadar();
           }
         };
-        img.src = `https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/${ZOOM}/${tx}/${ty}.png`;
+        img.src = `https://tile.openstreetmap.org/${ZOOM}/${tx}/${ty}.png`;
       }
     }
     // Tile loading only depends on the map center. Image callbacks retain this render's draw function.
@@ -198,7 +197,7 @@ export function Weather({ zip = '22314' }: WeatherProps) {
     const startX = cx - Math.floor(GRID_COLS / 2);
     const startY = cy - Math.floor(GRID_ROWS / 2);
 
-    const frameKey = `f${frame.time}`;
+    const frameKey = `f${frame.time}-${cx},${cy}`;
     // Check if already cached
     if (radarTilesRef.current.has(`${frameKey}-0,0`)) {
       drawRadar();
@@ -307,7 +306,7 @@ export function Weather({ zip = '22314' }: WeatherProps) {
     if (radar && radar.frames.length > 0) {
       const frame = radar.frames[radarFrame];
       if (frame) {
-        const frameKey = `f${frame.time}`;
+        const frameKey = `f${frame.time}-${cx},${cy}`;
         ctx.globalAlpha = 0.85;
         for (let row = 0; row < GRID_ROWS; row++) {
           for (let col = 0; col < GRID_COLS; col++) {
@@ -351,9 +350,12 @@ export function Weather({ zip = '22314' }: WeatherProps) {
 
   // Redraw on resize
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
     const onResize = () => drawRadar();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    const observer = new ResizeObserver(onResize);
+    observer.observe(container);
+    return () => observer.disconnect();
   }, [drawRadar]);
 
   const toggleRadar = useCallback(() => {
@@ -433,6 +435,14 @@ export function Weather({ zip = '22314' }: WeatherProps) {
         onClick={toggleRadar}
       >
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+
+        <div
+          className="absolute bottom-5 right-1 bg-black/80 px-1 text-[9px] text-white/80"
+          onClick={(event) => event.stopPropagation()}
+        >
+          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="hover:underline">OpenStreetMap</a> contributors
+          {' · '}<a href="https://www.rainviewer.com/" target="_blank" rel="noopener noreferrer" className="hover:underline">RainViewer</a>
+        </div>
 
         {/* Radar legend */}
         <div className="absolute top-1 right-1 flex gap-px items-center">
