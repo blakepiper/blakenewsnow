@@ -41,6 +41,32 @@ test('groups canonical article links, preserving the publisher and social contex
   assert.equal(canonicalArticleLink('https://bbc.com/x?at_medium=RSS&at_campaign=feed&utm_source=test'), 'https://bbc.com/x');
 });
 
+test('a burst from The Hindu ranks below recent alternatives without removing reports or changing dates', () => {
+  const hindu = Array.from({ length: 12 }, (_, index) => item({
+    id: `hindu-${index}`, source: 'The Hindu', title: `Distinct regional report number ${index}`,
+    link: `https://thehindu.com/article-${index}`, timestamp: new Date(NOW - index * 60000).toISOString(),
+  }));
+  const bbc = item({ id: 'bbc', title: 'Scientists discover ancient fossil remains in desert', link: 'https://bbc.com/fossils' });
+  const npr = item({ id: 'npr', source: 'NPR', title: 'Rail operator expands overnight passenger services',
+    link: 'https://npr.org/rail', timestamp: new Date(NOW - 2 * 3600000).toISOString() });
+  const grouped = groupFeedItems([...hindu, npr, bbc]);
+  assert.deepEqual(grouped.slice(0, 2).map(entry => entry.id), ['bbc', 'npr']);
+  assert.equal(grouped.length, 14);
+  assert.deepEqual(grouped.slice(2).map(entry => entry.timestamp), hindu.map(entry => entry.timestamp));
+  assert.deepEqual(groupFeedItems(hindu).map(entry => entry.id), hindu.map(entry => entry.id));
+});
+
+test('downweighting prefers another publisher for a shared article and preserves The Hindu association', () => {
+  const grouped = groupFeedItems([
+    item({ id: 'hindu', source: 'The Hindu', timestamp: new Date(NOW).toISOString() }),
+    item(),
+  ]);
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].source, 'BBC');
+  assert.deepEqual(new Set(grouped[0].sources), new Set(['The Hindu', 'BBC']));
+  assert.equal(grouped[0].relatedReports?.length, 2);
+});
+
 test('coauthored publications appear once with every followed author', () => {
   const grouped = groupFeedItems([
     item({ source: 'Dawn Song', link: 'https://arxiv.org/abs/2608.14611v2', publisher: 'arXiv' }),

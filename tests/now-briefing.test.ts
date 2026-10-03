@@ -61,6 +61,24 @@ test('uses only real headlines and links in the extractive briefing', () => {
   });
 });
 
+test('downweights The Hindu in Top Stories while retaining independently corroborated events', () => {
+  const solo = item('hindu-solo', 'Regional rail operator unveils overnight passenger service', 'The Hindu', 0);
+  const bbc = item('bbc', 'Scientists discover ancient fossil remains in desert', 'BBC', 1);
+  const briefing = buildNowBriefing([solo, bbc], { now: NOW });
+  assert.equal(briefing.clusters[0].link, bbc.link);
+  assert.equal(briefing.clusters[1].link, solo.link);
+  assert.equal(briefing.clusters[1].timestamp, solo.timestamp);
+
+  const shared = buildNowBriefing([
+    item('hindu', 'Iran launches missiles at American forces in Gulf', 'The Hindu', 0),
+    item('npr', 'Iran fires missiles toward American forces, military says', 'NPR', 1),
+    bbc,
+  ], { now: NOW });
+  assert.equal(shared.clusters[0].independentReportCount, 2);
+  assert.deepEqual(new Set(shared.clusters[0].sources), new Set(['The Hindu', 'NPR']));
+  assert.equal(shared.clusters[0].link, 'https://example.com/npr');
+});
+
 test('fills all six briefing cells when a filter page has enough reports', () => {
   const items = [
     item('one', 'Central bank announces revised lending guidance', 'Source A', 1),

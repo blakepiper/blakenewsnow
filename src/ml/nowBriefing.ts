@@ -1,6 +1,7 @@
 import type { FeedItem } from '../types';
 import { canonicalArticleLink, publisherIdentity } from '../../shared/source-policy.js';
 import { isBriefingReport } from '../utils/feedGrouping.ts';
+import { compareFeedItems, sourceRankingWeight } from '../utils/feedRanking.ts';
 
 const DEFAULT_WINDOW_HOURS = 36;
 const DEFAULT_MAX_ITEMS = 180;
@@ -284,7 +285,8 @@ function representativeFor(cluster: WorkingCluster, now: number): Document {
       cluster.documents.reduce((sum, other) => sum + cosine(document.vector, other.vector), 0)
       + (document.item.sourceType === 'news' ? 0.15 : 0)
       + Math.max(0, 1 - ((now - document.timestamp) / (24 * 60 * 60 * 1000))) * 0.1;
-    return centrality(right) - centrality(left);
+    return centrality(right) * sourceRankingWeight(right.item.source)
+      - centrality(left) * sourceRankingWeight(left.item.source);
   })[0];
 }
 
@@ -299,7 +301,10 @@ function clusterScore(cluster: WorkingCluster, now: number, independentReports: 
     0
   ) / Math.max(1, cluster.documents.length);
 
-  return (
+  // Independent coverage from another publisher retains the event's full
+  // weight; a downweighted source cannot dominate through volume alone.
+  const sourceWeight = Math.max(...cluster.documents.map(document => sourceRankingWeight(document.item.source)));
+  return sourceWeight * (
     Math.min(independentReports, 6) * 3
     + Math.log2(Math.min(independentReports, sources.size + 1) + 1) * 1.5
     + recency * 2
@@ -352,7 +357,7 @@ function uniqueRecentItems(items: FeedItem[], now: number, windowHours: number, 
         && timestamp <= now + 15 * 60 * 1000
         && timestamp >= oldestAllowed;
     })
-    .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
+    .sort(compareFeedItems)
     .filter(item => {
       const source = item.source.toLocaleLowerCase();
       const titleKey = `${source}\u0000${normalizedText(item.title)}`;
@@ -469,7 +474,7 @@ export function buildNowBriefing(items: FeedItem[], options: BriefingOptions = {
   // inventing text or links.
   const selectedLinks = new Set(ranked.map(cluster => cluster.link));
   const selectedDocuments = documents.filter(document => selectedLinks.has(document.item.link));
-  const fallbackDocuments = [...documents].sort((left, right) => right.timestamp - left.timestamp);
+  const fallbackDocuments = [...documents].sort((left, right) => compareFeedItems(left.item, right.item));
   for (const document of fallbackDocuments) {
     if (ranked.length >= maxClusters) break;
     if (selectedLinks.has(document.item.link)) continue;

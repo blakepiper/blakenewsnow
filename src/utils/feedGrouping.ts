@@ -1,6 +1,7 @@
 import type { FeedItem } from '../types.ts';
 import { canonicalArticleLink, sourceKind, publisherIdentity, entryContentType } from '../../shared/source-policy.js';
 import { getFeedItemMaxAge } from './formatters.ts';
+import { compareFeedItems } from './feedRanking.ts';
 
 export function isCurrentFeedItem(item: FeedItem, now = Date.now()): boolean {
   const timestamp = Date.parse(item.timestamp);
@@ -53,7 +54,7 @@ export function groupFeedItems(items: FeedItem[]): FeedItem[] {
   }
   return [...groups].map(group => {
     const ranked = [...group].sort((a, b) => Number(isBriefingReport(b)) - Number(isBriefingReport(a))
-      || Date.parse(b.timestamp) - Date.parse(a.timestamp));
+      || compareFeedItems(a, b));
     const representative = ranked[0];
     const sources = [...new Set(group.map(x => x.source))];
     return { ...representative, sources,
@@ -62,5 +63,5 @@ export function groupFeedItems(items: FeedItem[]): FeedItem[] {
       discoverySources: sources.filter(x => ['discovery', 'discussion'].includes(sourceKind(x))),
       relatedReports: group.map(x => ({ source: x.source, link: x.link })),
     };
-  }).sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+  }).sort(compareFeedItems);
 }
