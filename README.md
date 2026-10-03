@@ -34,7 +34,7 @@ The application is self-hosted and credential-free by default. Its **What's Happ
 - **Dedicated finance feed** — a Finance tab tracks stocks, IPOs, crypto, trade wars, tariffs, and global macroeconomics in one combined feed. BEA, USTR, Federal Register trade documents, SEC registration filings, Bank of Japan, CFTC, and Ethereum Foundation updates complement financial reporting. Relevant general and technology reporting joins the finance feed; source choices persist in Settings.
 - **Dedicated local feed** — a separate Local tab covers Washington, DC and Alexandria through local publishers, public radio, city news, and Virginia reporting.
 - **Local promotion filtering** — WTOP betting, sportsbook, casino, and prediction-market promotions are removed before local stories are displayed.
-- **Open social signals** — integrates Lemmy, Bluesky Discover, Mastodon trending links, Hacker News, and selected 4chan boards without application credentials. Bluesky Discover and anonymous boards are optional and disabled by default. Social activity dates are labeled separately from article dates, and social discovery does not count as independent briefing reporting.
+- **Open social signals** — integrates Lemmy, Bluesky Discover, Mastodon trending links, Hacker News, and selected 4chan boards without application credentials. All social sources are enabled by default and remain individually selectable in Settings. Existing installations enable them once when upgrading, then preserve subsequent source choices. Social activity dates are labeled separately from article dates, and social discovery does not count as independent briefing reporting.
 - **Source provenance and health** — Settings shows delivery failures, recent eligible counts, and source types. Researcher monitors have their own group. Shared articles and coauthored papers appear once with their source/author associations; original reports remain available for source selection and briefing clustering.
 - **Expanded coverage** — Daily Maverick and Global Voices add regional perspectives, KFF Health News adds health policy, and WMATA alerts and Alexandria council agendas add actionable local information.
 - **Market context** — international indices, euro/yen exchange rates, and euro-area consumer prices complement US indicators. Quotes and macro observations show their dates and units; stock movement is labeled as a fixed watchlist. Prediction entries preserve full questions and end dates, exclude sports/combination contracts, and require a liquid, identified exchange contract.
@@ -59,12 +59,14 @@ cd blakenewsnow
 
 The launcher keeps an incremental project-local environment in
 `.blakenewsnow-venv/`. It installs dependencies there on first use, updates
-that environment when the manifest or lockfile changes, and stops both the API
-and frontend together when interrupted with Ctrl+C. Once the frontend is ready,
+that environment when the manifest or lockfile changes, and serves the production
+frontend and API from one Node process. It builds only when frontend inputs change
+and stops when interrupted with Ctrl+C. Once the frontend is ready,
 it opens `http://localhost:3000` in the default browser; set
 `BLAKENEWSNOW_OPEN_BROWSER=0` to disable that behavior.
 
-Open [http://localhost:3000](http://localhost:3000). The Vite frontend runs on port `3000` and the Express API runs on port `3001`.
+Open [http://localhost:3000](http://localhost:3000). For development with automatic
+frontend and API reloads, use `./blakenewsnow --dev` (frontend `3000`, API `3001`).
 
 No API keys or paid services are required for the currently configured integrations. Public endpoints may still impose their own rate limits or availability rules.
 
@@ -97,18 +99,40 @@ Runtime configuration is provided through environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `3001` | Express API port |
+| `PORT` | `3000` in launcher; `3001` in development | Express listening port |
 | `CORS_ORIGIN` | `http://localhost:3000,http://127.0.0.1:3000` | Comma-separated frontend origins allowed to call the API |
-| `VITE_API_URL` | `http://localhost:3001` | API base URL embedded in the frontend build |
+| `VITE_API_URL` | Same origin in production; `http://localhost:3001` in development | API base URL embedded in the frontend build |
+| `SERVE_DIST` | Unset | Set `1` to serve `dist/` with the API |
+| `FEED_CACHE_DIR` | `.blakenewsnow-cache/` | Directory for bounded, normalized feed snapshots |
 
 For a split frontend/API deployment, set `VITE_API_URL` before building the frontend and set `CORS_ORIGIN` on the API server to the deployed frontend origin.
 
 Location, source selections, read state, and pane dimensions are stored locally in the browser.
 
+## Performance
+
+Feeds appear as each category responds. A cold RSS category waits at most one second
+for upstream work; slow sources continue in the background and the page checks for
+completed updates. Valid snapshots survive restarts and are checked against the same
+publication windows on every read. Source selections limit upstream requests.
+Parsed records are reused until each source's polling interval expires; researcher
+provider spacing applies only to actual requests. The snapshot cache is bounded to 12 MiB of serialized records, 512 sources,
+and 300 records per source.
+
+Widgets mount only in their active layout and visible sidebar sections. Shared polling
+avoids duplicate and overlapping requests, cancels unused requests, pauses while the
+page is hidden, and handles conditional HTTP 304 responses. API JSON and production
+assets are compressed. Radar retains only current frame tiles, uses one resize observer,
+and avoids resetting its canvas on every draw. Reduced motion pauses radar playback.
+Feed rows and briefing inputs are memoized; article extraction loads its DOM libraries
+only when a reader request needs them.
+
 ## Commands
 
 | Command | Purpose |
 |---|---|
+| `./blakenewsnow` | Launch the cached production build and API |
+| `./blakenewsnow --dev` | Launch development servers with automatic reloads |
 | `npm start` | Run the API and frontend development servers and open the app in the default browser |
 | `npm run dev` | Run the Vite frontend only |
 | `npm run server` | Run the Express API only |
@@ -140,7 +164,7 @@ The reader is deliberately separate from the publisher page. It only returns ext
 
 | Category | Sources |
 |---|---|
-| General news | NPR, BBC, CBC News, DW, The Guardian, Al Jazeera, ABC News, CBS News, The New York Times, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart, GDELT, RFI, The Hindu, Indian Express, SCMP, El Pais, Euronews, The New Humanitarian, Daily Maverick, Global Voices, African Arguments, The Conversation |
+| General news | NPR, BBC, CBC News, DW, The Guardian, Al Jazeera, Haaretz (English), ABC News, CBS News, The New York Times, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart, GDELT, RFI, The Hindu, Indian Express, SCMP, El Pais, Euronews, The New Humanitarian, Daily Maverick, Global Voices, African Arguments, The Conversation |
 | Official and verification | White House, Defense.gov, Congress.gov, CISA, NOAA, FDA Press Releases, FDA Recalls, CDC Travel Notices, FactCheck.org, Snopes, ICIJ, Bellingcat |
 | Technology | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters, MIT Technology Review, BleepingComputer, Rest of World, The Register, 404 Media, KrebsOnSecurity, Dark Reading, IEEE Spectrum, The Markup, GitHub Engineering, GitHub Security, OpenAI News, Google AI, AWS News, Cloudflare |
 | Science news | ScienceDaily, Phys.org, Science News, Live Science, Quanta Magazine, NASA, AAAS Science News, APS Psychology, Neuroscience News Psychology, Carbon Brief, Mongabay, STAT, KFF Health News, WHO, Undark |
@@ -205,7 +229,7 @@ tests/
 
 `npm run build` produces the static frontend in `dist/`. Serve that directory through a static host and run `npm run server` as a separate Node.js service.
 
-The API performs network requests to third-party services and keeps short-lived data in memory. For an internet-facing deployment, place it behind a production reverse proxy with request rate limits, timeouts, TLS, and normal process supervision.
+The API performs network requests to third-party services and stores normalized feed snapshots locally. For an internet-facing deployment, place it behind a production reverse proxy with request rate limits, timeouts, TLS, and normal process supervision.
 
 ## Content and privacy
 

@@ -17,7 +17,7 @@
     "dev": "vite",
     "server": "node server/proxy.cjs",
     "server:watch": "node --watch server/proxy.cjs",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/compress-assets.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test:api": "node tests/diagnostic.cjs",

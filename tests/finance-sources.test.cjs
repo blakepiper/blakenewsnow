@@ -53,7 +53,7 @@ test('an empty finance selection returns without contacting upstream services', 
 
 test('the finance route honors explicitly disabled and unknown source selections', async () => {
   const routes = new Map();
-  registerRoutes({ get: (path, handler) => routes.set(path, handler) });
+  registerRoutes({ use: () => {}, get: (path, handler) => routes.set(path, handler) });
   for (const sources of ['', 'Unknown']) {
     let body;
     await routes.get('/api/finance')({ query: { sources } }, { json: data => { body = data; } });

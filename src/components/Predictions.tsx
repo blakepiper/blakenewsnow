@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { usePollingQuery } from '../hooks/usePollingQuery';
 import { API_BASE, REFRESH_INTERVALS } from '../config';
 
 interface Prediction {
@@ -27,36 +27,8 @@ function getCategoryColor(category: string): string {
 }
 
 export function Predictions() {
-  const [predictions, setPredictions] = useState<Prediction[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function fetchPredictions() {
-      try {
-        const res = await fetch(`${API_BASE}/api/predictions`, { signal: controller.signal });
-        if (!res.ok) throw new Error('Failed to fetch');
-        const data = await res.json();
-        if (!Array.isArray(data)) throw new Error('Invalid response');
-        setPredictions(data);
-        setError(null);
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        console.error('Predictions fetch error:', err);
-        setError('Unable to load');
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }
-    fetchPredictions();
-    const interval = setInterval(fetchPredictions, REFRESH_INTERVALS.predictions);
-    return () => {
-      controller.abort();
-      clearInterval(interval);
-    };
-  }, []);
+  const { data, loading, error } = usePollingQuery<Prediction[]>(`${API_BASE}/api/predictions`, REFRESH_INTERVALS.predictions);
+  const predictions = data || [];
 
   // Group by category
   const byCategory = predictions.reduce((acc, pred) => {

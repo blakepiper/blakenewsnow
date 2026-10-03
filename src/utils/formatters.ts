@@ -50,6 +50,7 @@ export function getSourceColor(source: string): string {
     'DW': 'bg-blue-700',
     'Guardian': 'bg-indigo-500',
     'Al Jazeera': 'bg-orange-500',
+    'Haaretz': 'bg-sky-700',
     'ABC News': 'bg-yellow-500',
     'CBS News': 'bg-cyan-500',
     'NY Times': 'bg-slate-400',

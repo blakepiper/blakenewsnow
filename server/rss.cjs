@@ -186,9 +186,11 @@ function filterRecentItems(items, { maxAgeMs, now = Date.now() }) {
 
 module.exports = {
   FUTURE_TOLERANCE_MS,
+  decodeEntities,
   filterRecentItems,
   inferDateFromUrl,
   inferDateFromTitle,
+  isHttpUrl,
   parseAlexandriaNews,
   parseRSS,
 };

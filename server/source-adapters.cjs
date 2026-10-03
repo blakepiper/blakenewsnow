@@ -1,4 +1,4 @@
-const { parseRSS, parseAlexandriaNews, inferDateFromUrl } = require('./rss.cjs');
+const { parseRSS, parseAlexandriaNews, inferDateFromUrl, decodeEntities } = require('./rss.cjs');
 const { parseScientistPublications } = require('./scientist-publications.cjs');
 
 function datedItem(source, title, link, date, description = '', extra = {}) {
@@ -15,17 +15,18 @@ function parseConfiguredSource(data, feed) {
   if (feed.parser === 'scientist-publications') return parseScientistPublications(data, feed);
   if (feed.parser === 'alexandria-html') return parseAlexandriaNews(data, feed.name, feed.url);
   if (feed.parser === 'ustr-html') {
-    const { JSDOM } = require('jsdom');
-    const dom = new JSDOM(data);
-    try {
-      return [...dom.window.document.querySelectorAll('li')].flatMap(li => {
-        const a = li.querySelector('a[href*="/press-releases/20"]');
-        const date = li.textContent.match(/\b(20\d{2}-\d{2}-\d{2})(?!\d)/);
-        if (!a || !date) return [];
-        const item = datedItem(feed.name, a.textContent.trim(), new URL(a.getAttribute('href'), feed.url).href, date[1] + 'T00:00:00Z');
+    // USTR lists pair a printed ISO date with a release link; a full DOM is unnecessary.
+    const text = value => decodeEntities(value.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+    return [...data.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)].flatMap(([, content]) => {
+      const date = text(content).match(/\b(20\d{2}-\d{2}-\d{2})(?!\d)/);
+      if (!date) return [];
+      for (const [, href, title] of content.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+        if (!/\/press-releases\/20\d{2}\/./.test(href)) continue;
+        const item = datedItem(feed.name, text(title), new URL(href.replace(/&amp;/g, '&'), feed.url).href, date[1] + 'T00:00:00Z');
         return item ? [item] : [];
-      });
-    } finally { dom.window.close(); }
+      }
+      return [];
+    });
   }
   if (feed.parser === 'who-json') {
     const doc = JSON.parse(data);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { usePollingQuery } from '../hooks/usePollingQuery';
 import { API_BASE, REFRESH_INTERVALS } from '../config';
 
 interface MarketData {
@@ -84,60 +84,14 @@ function MacroItem({ item }: { item: MacroData }) {
 }
 
 export function Financial() {
-  const [indices, setIndices] = useState<MarketData[]>([]);
-  const [crypto, setCrypto] = useState<MarketData[]>([]);
-  const [movers, setMovers] = useState<MarketData[]>([]);
-  const [macro, setMacro] = useState<MacroData[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchMarkets() {
-      try {
-        const res = await fetch(`${API_BASE}/api/markets`);
-        if (!res.ok) throw new Error('Failed to fetch');
-        const data: MarketsResponse = await res.json();
-        setIndices(data.indices || []);
-        setMovers(data.movers || []);
-      } catch (err) {
-        console.error('Markets fetch error:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchMarkets();
-    const interval = setInterval(fetchMarkets, REFRESH_INTERVALS.markets);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    async function fetchMacro() {
-      try {
-        const res = await fetch(`${API_BASE}/api/macro`);
-        if (!res.ok) throw new Error('Failed to fetch');
-        setMacro(await res.json());
-      } catch (err) {
-        console.error('Macro fetch error:', err);
-      }
-    }
-    fetchMacro();
-    const interval = setInterval(fetchMacro, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    async function fetchCrypto() {
-      try {
-        const res = await fetch(`${API_BASE}/api/crypto`);
-        if (!res.ok) throw new Error('Failed to fetch');
-        setCrypto(await res.json());
-      } catch (err) {
-        console.error('Crypto fetch error:', err);
-      }
-    }
-    fetchCrypto();
-    const interval = setInterval(fetchCrypto, REFRESH_INTERVALS.crypto);
-    return () => clearInterval(interval);
-  }, []);
+  const markets = usePollingQuery<MarketsResponse>(`${API_BASE}/api/markets`, REFRESH_INTERVALS.markets);
+  const cryptoQuery = usePollingQuery<MarketData[]>(`${API_BASE}/api/crypto`, REFRESH_INTERVALS.crypto);
+  const macroQuery = usePollingQuery<MacroData[]>(`${API_BASE}/api/macro`, 5 * 60 * 1000);
+  const indices = markets.data?.indices || [];
+  const movers = markets.data?.movers || [];
+  const crypto = cryptoQuery.data || [];
+  const macro = macroQuery.data || [];
+  const loading = markets.loading;
 
   return (
     <div className="h-full flex flex-col overflow-hidden min-h-0">

@@ -7,11 +7,14 @@ const express = require('express');
 const cors = require('cors');
 const https = require('https');
 const { URL } = require('url');
+const path = require('node:path');
+const fs = require('node:fs');
+const { jsonResponses } = require('./json-response.cjs');
 const { registerRoutes: registerDataRoutes } = require('./data-feeds.cjs');
 const { registerArticlePreviewRoute } = require('./article-preview.cjs');
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3001;
+const PORT = Number(process.env.PORT) || (process.env.SERVE_DIST === '1' ? 3000 : 3001);
 
 const allowedOrigins = new Set(
   (process.env.CORS_ORIGIN || 'http://localhost:3000,http://127.0.0.1:3000')
@@ -20,6 +23,10 @@ const allowedOrigins = new Set(
     .filter(Boolean)
 );
 
+if (process.env.SERVE_DIST === '1') {
+  allowedOrigins.add(`http://localhost:${PORT}`);
+  allowedOrigins.add(`http://127.0.0.1:${PORT}`);
+}
 app.disable('x-powered-by');
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -28,7 +35,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.use(jsonResponses);
 app.use(cors({
+  exposedHeaders: ['ETag', 'X-Feed-Updating'],
   origin(origin, callback) {
     // Non-browser clients do not send Origin.
     return callback(null, !origin || allowedOrigins.has(origin));
@@ -77,9 +86,11 @@ app.get('/api/radar/tile', (req, res) => {
     proxyRes.pipe(res);
   });
 
+  proxyReq.setTimeout(10000, () => proxyReq.destroy(new Error('Radar request timed out')));
+  res.on('close', () => { if (!res.writableEnded) proxyReq.destroy(); });
   proxyReq.on('error', (err) => {
     console.error('[RADAR PROXY]', err.message);
-    res.status(500).send('Radar fetch failed');
+    if (!res.headersSent && !res.destroyed) res.status(502).send('Radar fetch failed');
   });
 
   proxyReq.end();
@@ -89,6 +100,26 @@ app.get('/api/radar/tile', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+
+if (process.env.SERVE_DIST === '1') {
+  const dist = path.join(__dirname, '../dist');
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (req.acceptsEncodings('gzip') !== 'gzip') return next();
+    let pathname;
+    try { pathname = decodeURIComponent(req.path); } catch { return next(); }
+    const file = path.resolve(dist, '.' + (pathname === '/' ? '/index.html' : pathname));
+    if (!file.startsWith(dist + path.sep) || !/\.(?:js|css|html|svg)$/.test(file) || !fs.existsSync(file + '.gz')) return next();
+    res.vary('Accept-Encoding');
+    res.set('Content-Encoding', 'gzip');
+    res.set('Cache-Control', pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+    res.type(path.extname(file));
+    res.sendFile(file + '.gz');
+  });
+  app.use(express.static(dist, { setHeaders(res, file) {
+    res.set('Cache-Control', file.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache');
+  } }));
+}
 
 app.listen(PORT, () => {
   console.log(`[SERVER] Blake News Now API running on http://localhost:${PORT}`);

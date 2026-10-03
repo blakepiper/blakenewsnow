@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { usePollingQuery } from '../hooks/usePollingQuery';
+import { usePageVisible } from '../hooks/usePageVisible';
 import { API_BASE, REFRESH_INTERVALS } from '../config';
 
 interface TickerItem {
@@ -35,25 +36,9 @@ function getCategoryLabel(category?: TickerItem['category']): string | null {
 }
 
 export function Ticker() {
-  const [items, setItems] = useState<TickerItem[]>([]);
-
-  // Fetch ticker items
-  useEffect(() => {
-    async function fetchTicker() {
-      try {
-        const res = await fetch(`${API_BASE}/api/ticker`);
-        if (!res.ok) throw new Error('Failed to fetch');
-        const data = await res.json();
-        setItems(data);
-      } catch (err) {
-        console.error('Ticker fetch error:', err);
-      }
-    }
-
-    fetchTicker();
-    const interval = setInterval(fetchTicker, REFRESH_INTERVALS.ticker);
-    return () => clearInterval(interval);
-  }, []);
+  const { data } = usePollingQuery<TickerItem[]>(`${API_BASE}/api/ticker`, REFRESH_INTERVALS.ticker);
+  const items = data || [];
+  const visible = usePageVisible();
 
   // Duplicate items for seamless loop
   const duplicatedItems = [...items, ...items];
@@ -69,7 +54,7 @@ export function Ticker() {
   return (
     <div className="h-full bg-gradient-to-r from-[#0d0d0d] via-[#111111] to-[#0d0d0d] flex items-center overflow-hidden border-t border-white/10">
       {/* Ticker content */}
-      <div className="animate-ticker flex items-center whitespace-nowrap will-change-transform">
+      <div style={{ animationPlayState: visible ? 'running' : 'paused' }} className="animate-ticker flex items-center whitespace-nowrap will-change-transform">
         {duplicatedItems.map((item, index) => (
           <div key={`${item.id}-${index}`} className="flex items-center">
             {/* Separator */}

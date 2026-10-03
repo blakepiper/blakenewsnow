@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
+MODE="${BLAKENEWSNOW_MODE:-production}"
+case "${1:-}" in
+  --dev) MODE=development ;;
+  --help) echo 'Usage: ./blakenewsnow [--dev] (default: cached production build)'; exit 0 ;;
+  '') ;;
+  *) echo "Unknown option: $1" >&2; exit 1 ;;
+esac
+[[ "$MODE" == production || "$MODE" == development ]] || { echo 'Invalid BLAKENEWSNOW_MODE' >&2; exit 1; }
 
 # This is a project-local Node environment, not a Python virtualenv. It keeps
 # the installed packages in a reusable directory and exposes them through a
@@ -59,7 +67,9 @@ ENV_NODE_MODULES="$ENV_DIR/node_modules"
 NODE_MODULES_LINK="$ROOT_DIR/node_modules"
 CONCURRENTLY_BIN="$ENV_DIR/node_modules/.bin/concurrently"
 VITE_BIN="$ENV_DIR/node_modules/.bin/vite"
-FRONTEND_URL="${BLAKENEWSNOW_FRONTEND_URL:-http://localhost:3000}"
+FRONTEND_PORT=3000
+if [[ "$MODE" == production ]]; then FRONTEND_PORT="${PORT:-3000}"; fi
+FRONTEND_URL="${BLAKENEWSNOW_FRONTEND_URL:-http://localhost:$FRONTEND_PORT}"
 
 LINK_CREATED=0
 SERVICES_PID=0
@@ -218,12 +228,22 @@ export NODE_PATH="$ENV_DIR/node_modules${NODE_PATH:+:$NODE_PATH}"
 
 cd "$ROOT_DIR"
 
-"$CONCURRENTLY_BIN" \
-  --kill-others \
-  --names api,web \
-  --prefix-colors blue,green \
-  'node server/proxy.cjs' \
-  "vite --config \"$ENV_VITE_CONFIG\"" &
+if [[ "$MODE" == development ]]; then
+  "$CONCURRENTLY_BIN" \
+    --kill-others \
+    --names api,web \
+    --prefix-colors blue,green \
+    'node --watch server/proxy.cjs' \
+    "vite --config \"$ENV_VITE_CONFIG\"" &
+else
+  BUILD_STATE="$(node scripts/build-fingerprint.cjs)"
+  if [[ ! -f dist/index.html || ! -s "$ENV_DIR/.build-state" || "$(<"$ENV_DIR/.build-state")" != "$BUILD_STATE" ]]; then
+    echo 'blakenewsnow: building production frontend'
+    npm run build
+    printf '%s\n' "$BUILD_STATE" > "$ENV_DIR/.build-state"
+  fi
+  SERVE_DIST=1 PORT="${PORT:-3000}" node server/proxy.cjs &
+fi
 SERVICES_PID=$!
 
 if [[ "${BLAKENEWSNOW_OPEN_BROWSER:-1}" != 0 ]]; then

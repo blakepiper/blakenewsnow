@@ -20,18 +20,26 @@ test('includes credential-free federated and open social sources', () => {
   const sources = new Map(DEFAULT_SETTINGS.sources.map(source => [source.id, source]));
 
   for (const id of [
+    'lemmy-news',
+    'lemmy-world',
+    'lemmy-technology',
     'lemmy-politics',
     'lemmy-science',
     'mastodon-trending',
+    'bluesky-discover',
+    '4chan-news',
+    '4chan-pol',
+    '4chan-lit',
+    '4chan-his',
   ]) {
     assert.equal(sources.get(id)?.enabled, true);
     assert.equal(sources.get(id)?.category, 'social');
   }
 });
 
-test('includes 4chan /g/ as an optional technology source with its API alias', () => {
+test('includes 4chan /g/ as an enabled technology source with its API alias', () => {
   const source = DEFAULT_SETTINGS.sources.find(source => source.id === '4chan-g');
-  assert.equal(source?.enabled, false);
+  assert.equal(source?.enabled, true);
   assert.equal(source?.category, 'tech');
   assert.deepEqual(source?.apiSources, ['/g/']);
   assert.equal(getSourceCategory('/g/'), 'tech');
@@ -103,7 +111,7 @@ test('selects and unselects every source in one immutable update', () => {
 
   assert.ok(unselected.sources.every(source => !source.enabled));
   assert.ok(selected.sources.every(source => source.enabled));
-  assert.ok(DEFAULT_SETTINGS.sources.some(source => !source.enabled));
+  assert.ok(DEFAULT_SETTINGS.sources.every(source => source.enabled));
   assert.equal(setAllSources(selected, true), selected);
 });
 

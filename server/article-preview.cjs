@@ -2,8 +2,6 @@ const dns = require('dns').promises;
 const http = require('http');
 const https = require('https');
 const net = require('net');
-const { Readability } = require('@mozilla/readability');
-const { JSDOM, VirtualConsole } = require('jsdom');
 
 const MAX_REDIRECTS = 4;
 const MAX_HTML_BYTES = 3 * 1024 * 1024;
@@ -208,6 +206,8 @@ function cleanText(value) {
 }
 
 function extractArticle(html, url) {
+  const { Readability } = require('@mozilla/readability');
+  const { JSDOM, VirtualConsole } = require('jsdom');
   const virtualConsole = new VirtualConsole();
   const dom = new JSDOM(html, { url, virtualConsole });
   try {

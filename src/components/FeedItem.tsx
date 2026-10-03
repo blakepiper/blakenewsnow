@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, memo } from 'react';
 import type { FeedItem as FeedItemType } from '../types';
 import { formatTimeAgo, formatScore } from '../utils/formatters';
 import { SourceChip } from './SourceChip';
@@ -6,18 +6,22 @@ import { entryContentType } from '../../shared/source-policy.js';
 
 interface FeedItemProps {
   item: FeedItemType;
+  isDesktop: boolean;
   isSelected?: boolean;
   isRead?: boolean;
   isNew?: boolean;
-  onSelect?: (item: FeedItemType) => void;
+  index?: number;
+  onSelect?: (item: FeedItemType, index: number) => void;
 }
 
-export function FeedItem({
+export const FeedItem = memo(function FeedItem({
   item,
+  isDesktop,
   isSelected = false,
   isRead = false,
   isNew = false,
   onSelect,
+  index = 0,
 }: FeedItemProps) {
   const contentType = item.contentType || entryContentType(item);
   const label = contentType === 'reporting' ? '' : contentType;
@@ -25,12 +29,13 @@ export function FeedItem({
   const provenance = [...sources, ...(item.publisher && item.publisher !== item.source ? [item.publisher] : [])].join(', ');
   const timeLabel = item.timestampKind && item.timestampKind !== 'published' ? item.timestampKind : '';
   const handleClick = useCallback(() => {
-    onSelect?.(item);
-  }, [item, onSelect]);
+    onSelect?.(item, index);
+  }, [item, index, onSelect]);
 
   return (
     <button
       type="button"
+      data-feed-index={index}
       data-headline
       title={`${provenance}${label ? ` · ${label}` : ''}\n${timeLabel || 'Published'}: ${item.timestamp}${item.publishedAt ? `\nArticle date (${item.publicationDateSource || 'publisher'}): ${item.publishedAt}` : ''}`}
       onClick={handleClick}
@@ -42,7 +47,7 @@ export function FeedItem({
       `}
     >
       {/* Desktop: single dense line */}
-      <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 text-xs leading-tight">
+      {isDesktop && <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 text-xs leading-tight">
         {/* Source badge */}
         <SourceChip source={item.source} className="shrink-0 text-[10px] px-1 py-px rounded font-medium">
           {item.source.length > 12 ? item.source.slice(0, 10) + '..' : item.source}
@@ -73,10 +78,10 @@ export function FeedItem({
         <span className="text-white/40 shrink-0 text-right tabular-nums">
           {timeLabel && `${timeLabel} `}{formatTimeAgo(item.timestamp)}
         </span>
-      </div>
+      </div>}
 
       {/* Mobile: two-line layout with larger touch target */}
-      <div className="flex md:hidden flex-col gap-0.5 px-3 py-3 min-h-[44px]">
+      {!isDesktop && <div className="flex md:hidden flex-col gap-0.5 px-3 py-3 min-h-[44px]">
         {/* Title */}
         <span className={`text-sm leading-snug line-clamp-2 ${isRead ? 'text-white/40' : 'text-white/90'}`}>
           {item.title}
@@ -112,7 +117,7 @@ export function FeedItem({
             {timeLabel && `${timeLabel} `}{formatTimeAgo(item.timestamp)}
           </span>
         </div>
-      </div>
+      </div>}
     </button>
   );
-}
+});

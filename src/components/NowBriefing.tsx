@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { ButtonBase } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -80,7 +80,7 @@ const EmptyBriefing = styled('div')(({ theme }) => ({
   fontSize: 10,
 }));
 
-export function NowBriefing({ items, onPreview }: NowBriefingProps) {
+export const NowBriefing = memo(function NowBriefing({ items, onPreview }: NowBriefingProps) {
   const briefing = useMemo(() => buildNowBriefing(items), [items]);
 
   if (items.length === 0) return null;
@@ -117,4 +117,4 @@ export function NowBriefing({ items, onPreview }: NowBriefingProps) {
       )}
     </BriefingRoot>
   );
-}
+});

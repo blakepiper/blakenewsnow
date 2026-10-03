@@ -84,11 +84,11 @@ test('filters paid entries without deleting news about state-sponsored violence'
   assert.equal(isPromotionalEntry({ title: 'Report documents state-sponsored violence', source: 'BBC' }), false);
 });
 
-test('source-policy migration disables optional defaults once and preserves subsequent choices', () => {
+test('source-policy migration enables all social defaults once and preserves subsequent choices', () => {
   const defaults = DEFAULT_SETTINGS.sources;
-  const stored = defaults.map(source => ({ ...source, enabled: true }));
+  const stored = defaults.map(source => ({ ...source, enabled: false }));
   const migrated = mergeSourceConfigs(defaults, stored, true);
-  for (const id of ['4chan-g', '4chan-news', '4chan-pol', '4chan-lit', '4chan-his', 'bluesky-discover']) assert.equal(migrated.find(source => source.id === id)?.enabled, false);
-  assert.equal(migrated.find(source => source.id === 'bbc')?.enabled, true);
-  assert.equal(mergeSourceConfigs(defaults, stored).find(source => source.id === '4chan-g')?.enabled, true);
+  for (const id of ['4chan-g', '4chan-news', '4chan-pol', '4chan-lit', '4chan-his', 'bluesky-discover', 'mastodon-trending', 'lemmy-news', 'lemmy-world', 'lemmy-technology', 'lemmy-politics', 'lemmy-science', 'hackernews', 'lobsters']) assert.equal(migrated.find(source => source.id === id)?.enabled, true);
+  assert.equal(migrated.find(source => source.id === 'bbc')?.enabled, false);
+  assert.equal(mergeSourceConfigs(defaults, stored).find(source => source.id === '4chan-g')?.enabled, false);
 });

@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect } from 'react';
+import { useRef, useCallback, useState, useEffect, useMemo } from 'react';
 import type { FeedItem as FeedItemType } from '../types';
 import type { FilterType } from './FilterPills';
 import { FeedItem } from './FeedItem';
@@ -54,27 +54,30 @@ export function UnifiedFeed({
   const touchStartY = useRef(0);
 
   // Filter items
-  const filteredItems = items.filter(item => {
-    if (filter === 'all') return true;
+  const filteredItems = useMemo(() => filter === 'all' ? items : items.filter(item => {
     return item.sourceType === filter;
-  });
-  const filteredBriefingItems = briefingItems.filter(item => {
-    if (filter === 'all') return true;
+  }), [items, filter]);
+  const filteredBriefingItems = useMemo(() => filter === 'all' ? briefingItems : briefingItems.filter(item => {
     return item.sourceType === filter;
-  });
+  }), [briefingItems, filter]);
+
+  const readIds = useMemo(() => new Set(readArticles), [readArticles]);
+  const selectItem = useCallback((item: FeedItemType, index: number) => {
+    onSelectIndex(index); onPreview(item);
+  }, [onSelectIndex, onPreview]);
 
   // Auto-scroll to selected item
   useEffect(() => {
     if (isDesktop) {
       const container = desktopRef.current;
       if (!container) return;
-      const els = container.querySelectorAll('[data-headline]');
-      els[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+      const els = container.querySelector(`[data-feed-index="${selectedIndex}"]`);
+      els?.scrollIntoView({ block: 'nearest' });
     } else {
       const container = mobileRef.current;
       if (!container) return;
-      const els = container.querySelectorAll('[data-headline]');
-      els[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+      const els = container.querySelector(`[data-feed-index="${selectedIndex}"]`);
+      els?.scrollIntoView({ block: 'nearest' });
     }
   }, [selectedIndex, isDesktop]);
 
@@ -145,13 +148,12 @@ export function UnifiedFeed({
           <FeedItem
             key={item.id}
             item={item}
+            isDesktop={isDesktop}
             isSelected={selectedIndex === index}
-            isRead={readArticles.includes(item.id)}
+            isRead={readIds.has(item.id)}
             isNew={newItemIds.has(item.id)}
-            onSelect={item => {
-              onSelectIndex(index);
-              onPreview(item);
-            }}
+            index={index}
+            onSelect={selectItem}
           />
         ))}
       </div>
@@ -169,13 +171,12 @@ export function UnifiedFeed({
         <div key={item.id} className={index % 2 === 0 ? 'border-r border-white/5' : ''}>
           <FeedItem
             item={item}
+            isDesktop={isDesktop}
             isSelected={selectedIndex === index}
-            isRead={readArticles.includes(item.id)}
+            isRead={readIds.has(item.id)}
             isNew={newItemIds.has(item.id)}
-            onSelect={item => {
-              onSelectIndex(index);
-              onPreview(item);
-            }}
+            index={index}
+            onSelect={selectItem}
           />
         </div>
       ))}

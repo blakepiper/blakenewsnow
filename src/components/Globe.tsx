@@ -1,3 +1,4 @@
+import { usePageVisible } from '../hooks/usePageVisible';
 import { useEffect, useRef, useState } from 'react';
 import { ANIMATION_INTERVALS } from '../config';
 import {
@@ -114,7 +115,7 @@ function renderGlobe(
   if (!context) return;
 
   const radius = GLOBE_SIZE / 2;
-  const segments = 32;
+  const segments = 20;
   const step = GLOBE_SIZE / segments;
   const vertex = (column: number, row: number): TextureVertex => {
     const x = column * step;
@@ -155,6 +156,7 @@ function renderGlobe(
 }
 
 export function Globe() {
+  const visible = usePageVisible();
   const [cityIndex, setCityIndex] = useState(0);
   const [, setClockTick] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -162,6 +164,7 @@ export function Globe() {
   const city = CITIES[cityIndex];
 
   useEffect(() => {
+    if (!visible) return;
     const rotation = window.setInterval(() => {
       setCityIndex(index => (index + 1) % CITIES.length);
     }, ANIMATION_INTERVALS.globeRotation);
@@ -171,10 +174,12 @@ export function Globe() {
       window.clearInterval(rotation);
       window.clearInterval(clock);
     };
-  }, []);
+  }, [visible]);
 
   useEffect(() => {
+    if (!visible) return;
     let animationFrame = 0;
+    let lastFrameAt = -Infinity;
     let cancelled = false;
     const destination = { lat: city.lat, lon: city.lon };
     const origin = renderedCenter.current;
@@ -188,6 +193,10 @@ export function Globe() {
       const drawFrame = (now: number) => {
         if (cancelled || !canvasRef.current) return;
 
+        if (now - lastFrameAt < 1000 / 30) {
+          animationFrame = window.requestAnimationFrame(drawFrame); return;
+        }
+        lastFrameAt = now;
         const elapsed = reduceMotion ? 1 : Math.min(1, (now - startedAt) / ROTATION_DURATION);
         const eased = 1 - Math.pow(1 - elapsed, 3);
         const center = interpolateGlobeCenter(origin, destination, eased);
@@ -208,7 +217,7 @@ export function Globe() {
       cancelled = true;
       window.cancelAnimationFrame(animationFrame);
     };
-  }, [city.lat, city.lon]);
+  }, [city.lat, city.lon, visible]);
 
   const localTime = getLocalTime(city.timeZone);
 

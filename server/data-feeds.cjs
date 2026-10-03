@@ -4,11 +4,13 @@
  */
 
 const crypto = require('crypto');
+const path = require('node:path');
+const { FeedSnapshots } = require('./feed-snapshots.cjs');
 const https = require('https');
 const http = require('http');
 const zlib = require('zlib');
 const { URL } = require('url');
-const { filterRecentItems, parseRSS } = require('./rss.cjs');
+const { filterRecentItems, parseRSS, isHttpUrl } = require('./rss.cjs');
 const { SCIENTIST_FEEDS } = require('./scientist-publications.cjs');
 const { parseConfiguredSource, socialProvenance } = require('./source-adapters.cjs');
 const { sourceWindowDays, sourceKind, publisherIdentity, canonicalArticleLink, isPromotionalEntry, isFinanceEntry, entryContentType } = require('../shared/source-policy.js');
@@ -81,6 +83,7 @@ const RSS_FEEDS = {
     { name: 'DW', url: 'https://rss.dw.com/rdf/rss-en-top' },
     { name: 'Guardian', url: 'https://www.theguardian.com/world/rss' },
     { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml' },
+    { name: 'Haaretz', url: 'https://www.haaretz.com/srv/haaretz-latest-headlines' },
     { name: 'ABC News', url: 'https://abcnews.go.com/abcnews/topstories' },
     { name: 'CBS News', url: 'https://www.cbsnews.com/latest/rss/main' },
     { name: 'NY Times', url: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
@@ -394,7 +397,7 @@ const feedDiagnostics = new Map();
 function normalizedFeedItem(item, prefix) {
   return {
     id: stableId(prefix, item.title, item.source), title: item.title, source: item.source,
-    timestamp: item.pubDate.toISOString(), link: item.link, description: item.description,
+    timestamp: item.pubDate.toISOString(), link: item.link, description: item.description?.slice(0, 4000),
     publisher: item.publisher || publisherIdentity(item.source), sourceKind: sourceKind(item.source),
     contentType: item.contentType || entryContentType(item),
     timestampKind: item.timestampKind || 'published',
@@ -428,50 +431,82 @@ function selectCategoryItems(items, requested, limit, cap) {
   return selectDiverseItems(requested === null ? items : items.filter(x => requested.has(x.source)), limit, cap);
 }
 
-async function loadCategoryPool(category, prefix) {
-  if (isCacheValid(category)) return cache[category].data;
-  const collected = [];
-  let arxivQueue = Promise.resolve();
-  let crossrefQueue = Promise.resolve();
-  function requestFeed(feed) {
-    const options = { accept: feed.parser && !['alexandria-html', 'ustr-html'].includes(feed.parser)
-      ? feed.provider === 'arxiv' ? 'application/atom+xml' : 'application/json'
-      : 'application/rss+xml, application/atom+xml, application/xml, text/xml, text/html' };
-    if (feed.provider === 'arxiv') {
-      const request = arxivQueue.then(() => fetchConfiguredFeed(feed, options));
-      arxivQueue = request.catch(() => {}).then(() => new Promise(resolve => setTimeout(resolve, 3100)));
-      return request;
-    }
-    if (feed.provider === 'crossref') {
-      const request = crossrefQueue.then(() => fetchConfiguredFeed(feed, options));
-      crossrefQueue = request.catch(() => {}).then(() => new Promise(resolve => setTimeout(resolve, 1500)));
-      return request;
-    }
-    return fetchConfiguredFeed(feed, options);
-  }
-  await Promise.all(RSS_FEEDS[category].map(async feed => {
-    try {
-      const { data } = await requestFeed(feed);
-      const parsed = parseConfiguredSource(data, feed);
-      if (!parsed.length && !['scientist-publications', 'legistar', 'wmata'].includes(feed.parser)) {
-        throw new Error('Response contains no parseable entries');
+const snapshots = new FeedSnapshots(process.env.FEED_CACHE_DIR || path.join(__dirname, '../.blakenewsnow-cache'));
+const feedAttempts = new Map();
+const providerQueues = new Map();
+const POOL_BUDGET_MS = 1000;
+const snapshotKeys = new WeakMap();
+function snapshotKey(category, feed) {
+  // Invalidate when configuration or editorial policies change.
+  if (snapshotKeys.get(feed)?.[category]) return snapshotKeys.get(feed)[category];
+  const key = crypto.createHash('sha256').update(JSON.stringify([category, feed, String(feed.filter),
+    String(isPromotionalEntry), String(isFinanceEntry), String(sourceWindowDays)])).digest('hex');
+  snapshotKeys.set(feed, { ...snapshotKeys.get(feed), [category]: key });
+  return key;
+}
+function currentSnapshotItems(category, feed, maxAgeMs = feed.maxAgeMs, now = Date.now()) {
+  return (snapshots.get(snapshotKey(category, feed))?.items || []).filter(item => {
+    if (!item || item.source !== feed.name || typeof item.title !== 'string' || !isHttpUrl(item.link)) return false;
+    const time = Date.parse(item.timestamp);
+    return Number.isFinite(time) && time <= now && now - time <= maxAgeMs
+      && (!item.expiresAt || Date.parse(item.expiresAt) > now);
+  });
+}
+function currentCategoryItems(category) {
+  const now = Date.now();
+  return RSS_FEEDS[category].flatMap(feed => currentSnapshotItems(category, feed, feed.maxAgeMs, now))
+    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+}
+
+function scheduleFeed(feed, task) {
+  const delay = feed.provider === 'arxiv' ? 3100 : feed.provider === 'crossref' ? 1500 : 0;
+  if (!delay) return task();
+  const request = (providerQueues.get(feed.provider) || Promise.resolve()).then(task);
+  providerQueues.set(feed.provider, request.catch(() => {}).then(() => new Promise(resolve => {
+    const timer = setTimeout(resolve, delay); timer.unref();
+  })));
+  return request;
+}
+async function loadCategoryPool(category, prefix, requested = null) {
+  const feeds = RSS_FEEDS[category].filter(feed => requested === null || requested.has(feed.name));
+  const pending = [];
+  for (const feed of feeds) {
+    const key = snapshotKey(category, feed);
+    const existing = snapshots.get(key);
+    if (existing && Date.now() - existing.at < feed.pollIntervalMs) continue;
+    const requestKey = `parsed:${key}`;
+    if (!inFlightRequests.has(requestKey) && Date.now() - (feedAttempts.get(key) || 0) < 60000) continue;
+    pending.push(dedupeRequest(requestKey, () => scheduleFeed(feed, async () => {
+      feedAttempts.set(key, Date.now());
+      try {
+        const options = { accept: feed.parser && !['alexandria-html', 'ustr-html'].includes(feed.parser)
+          ? feed.provider === 'arxiv' ? 'application/atom+xml' : 'application/json'
+          : 'application/rss+xml, application/atom+xml, application/xml, text/xml, text/html' };
+        const { data } = await fetchConfiguredFeed(feed, options);
+        const parsed = parseConfiguredSource(data, feed);
+        if (!parsed.length && !['scientist-publications', 'legistar', 'wmata'].includes(feed.parser)) {
+          throw new Error('Response contains no parseable entries');
+        }
+        const dated = filterRecentItems(parsed, { maxAgeMs: feed.maxAgeMs });
+        const eligible = dated.filter(item => !isPromotionalEntry(item) && (!feed.filter || feed.filter(item))
+          && (category !== 'finance' || isFinanceEntry(item)));
+        const newest = parsed.filter(x => x.pubDate && Number.isFinite(+x.pubDate) && +x.pubDate <= Date.now()).sort((a, b) => b.pubDate - a.pubDate)[0];
+        feedDiagnostics.set(feed.name, { checkedAt: new Date().toISOString(), parsed: parsed.length,
+          itemCount: eligible.length, filtered: dated.length - eligible.length, newestDate: newest?.pubDate.toISOString() || null,
+          state: !eligible.length ? sourceKind(feed.name) === 'author' ? 'no-recent-publications' : 'no-recent-items' : 'ok' });
+        snapshots.set(key, normalizeCategoryItems(eligible, prefix));
+      } catch (err) {
+        feedDiagnostics.set(feed.name, { ...feedDiagnostics.get(feed.name), checkedAt: new Date().toISOString(), state: 'unavailable', error: describeError(err).slice(0, 160) });
+        console.error(`[DATA] ${feed.name}:`, describeError(err));
       }
-      const dated = filterRecentItems(parsed, { maxAgeMs: feed.maxAgeMs });
-      const eligible = dated.filter(item => !isPromotionalEntry(item) && (!feed.filter || feed.filter(item))
-        && (category !== 'finance' || isFinanceEntry(item)));
-      const newest = parsed.filter(x => x.pubDate && Number.isFinite(+x.pubDate) && +x.pubDate <= Date.now()).sort((a, b) => b.pubDate - a.pubDate)[0];
-      feedDiagnostics.set(feed.name, { checkedAt: new Date().toISOString(), parsed: parsed.length,
-        itemCount: eligible.length, filtered: dated.length - eligible.length, newestDate: newest?.pubDate.toISOString() || null,
-        state: !eligible.length ? sourceKind(feed.name) === 'author' ? 'no-recent-publications' : 'no-recent-items' : 'ok' });
-      collected.push(...eligible);
-      // First science load can return available journals while slower author searches finish.
-      cache[category] = { data: normalizeCategoryItems(collected, prefix), timestamp: Date.now() };
-    } catch (err) {
-      feedDiagnostics.set(feed.name, { ...feedDiagnostics.get(feed.name), checkedAt: new Date().toISOString(), state: 'unavailable', error: describeError(err).slice(0, 160) });
-      console.error(`[DATA] ${feed.name}:`, describeError(err));
-    }
-  }));
-  const result = normalizeCategoryItems(collected, prefix);
+    })));
+  }
+  // On a warm start the validated snapshot is immediate. Cold requests have a
+  // bounded wait while slow providers continue filling their individual caches.
+  if (!currentCategoryItems(category).some(item => requested === null || requested.has(item.source))) {
+    await withBudget(Promise.all(pending), POOL_BUDGET_MS, null);
+  }
+  const result = currentCategoryItems(category);
   cache[category] = { data: result, timestamp: Date.now() };
   return result;
 }
@@ -481,7 +516,9 @@ function getSourceHealth() {
     ...['GDELT', 'Hacker News', 'Bluesky Discover', 'Mastodon Trending', ...LEMMY_COMMUNITIES.map(name => 'c/' + name), '/news/', '/pol/', '/lit/', '/his/', '/g/'].map(name => ({ name }))];
   return feeds.map(feed => {
     const transport = sourceHealth.get(feed.name) || {};
-    const content = feedDiagnostics.get(feed.name) || {};
+    const category = Object.keys(RSS_FEEDS).find(key => RSS_FEEDS[key].includes(feed));
+    const stored = category && snapshots.get(snapshotKey(category, feed));
+    const content = feedDiagnostics.get(feed.name) || (stored ? { state: 'cached', checkedAt: new Date(stored.at).toISOString(), itemCount: stored.items.length, newestDate: stored.items[0]?.timestamp } : {});
     return { name: feed.name, kind: sourceKind(feed.name), windowDays: sourceWindowDays(feed.name),
       lastAttempt: transport.lastAttempt || content.checkedAt || null, lastSuccess: transport.lastSuccess || null,
       retryAt: transport.until > Date.now() ? new Date(transport.until).toISOString() : null,
@@ -676,7 +713,12 @@ function sendRequest(url, options) {
         req.destroy();
         reject(err);
       });
-      body.on('data', chunk => data += chunk);
+      let bytes = 0;
+      body.on('data', chunk => {
+        bytes += Buffer.byteLength(chunk);
+        if (bytes > 8 * 1024 * 1024) { body.destroy(new Error('Feed exceeds 8 MiB')); req.destroy(); return; }
+        data += chunk;
+      });
       body.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve({ data, status: res.statusCode });
@@ -729,7 +771,7 @@ function recordSourceFailure(key, error) {
   health.lastAttempt = new Date().toISOString();
   health.error = error ? describeError(error).replace(/HTTP (\d+):[\s\S]*/, 'HTTP $1').slice(0, 120) : 'Request failed';
   if (health.failures >= BREAKER_THRESHOLD) {
-    const backoff = BREAKER_BASE_COOLDOWN_MS * 2 ** (health.failures - BREAKER_THRESHOLD);
+    const backoff = BREAKER_BASE_COOLDOWN_MS * 2 ** Math.min(20, health.failures - BREAKER_THRESHOLD);
     health.until = Date.now() + Math.min(backoff, BREAKER_MAX_COOLDOWN_MS);
   }
   sourceHealth.set(key, health);
@@ -773,23 +815,8 @@ function fetch(url, options = {}) {
   }, { attempts: options.retries ?? 2, label: options.label }));
 }
 
-const configuredFeedCache = new Map();
 async function fetchConfiguredFeed(feed, options = {}) {
-  const key = `${feed.url}:${JSON.stringify(feed.headers || {})}`;
-  const existing = configuredFeedCache.get(key);
-  if (existing && Date.now() - existing.at < (feed.pollIntervalMs || 60000)) return existing.response;
-  return dedupeRequest(`feed:${key}`, async () => {
-    try {
-      const response = await requestConfiguredFeed(feed, options);
-      configuredFeedCache.set(key, { at: Date.now(), response });
-      return response;
-    } catch (error) {
-      // Reuse last successful content only through the same strict date filters.
-      // Transport health still reports the failure and its last successful request.
-      if (existing) return existing.response;
-      throw error;
-    }
-  });
+  return dedupeRequest(`feed:${feed.url}:${JSON.stringify(feed.headers || {})}`, () => requestConfiguredFeed(feed, options));
 }
 
 async function requestConfiguredFeed(feed, options = {}) {
@@ -814,7 +841,16 @@ async function requestConfiguredFeed(feed, options = {}) {
       signal: AbortSignal.timeout(requestOptions.timeout || DEFAULT_REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return { data: await response.text(), status: response.status };
+    const reader = response.body.getReader();
+    const chunks = []; let bytes = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.length;
+      if (bytes > 8 * 1024 * 1024) { await reader.cancel(); throw new Error('Feed exceeds 8 MiB'); }
+      chunks.push(value);
+    }
+    return { data: Buffer.concat(chunks).toString('utf8'), status: response.status };
   }), { attempts: options.retries ?? 2, label: feed.name }));
 }
 
@@ -866,7 +902,6 @@ function parseGdeltDate(value) {
 
 // Resolves with `fallback` if `promise` has not settled within `budgetMs`. The original
 // promise keeps running so a slow source can still warm its own cache.
-const GDELT_POOL_BUDGET_MS = 6000;
 
 function withBudget(promise, budgetMs, fallback) {
   return new Promise(resolve => {
@@ -935,9 +970,11 @@ async function fetchGdeltArticles() {
 // ============================================
 // Fetch Headlines
 // ============================================
-async function loadHeadlinePool() {
-  const rss = await loadCategoryPool('headlines', 'headline');
-  const gdelt = await withBudget(fetchGdeltArticles(), GDELT_POOL_BUDGET_MS, []);
+async function loadHeadlinePool(requested = null) {
+  const rss = await loadCategoryPool('headlines', 'headline', requested);
+  if (requested !== null && !requested.has('GDELT')) return rss;
+  const gdeltRequest = dedupeRequest('gdelt-pool', fetchGdeltArticles);
+  const gdelt = cache.gdelt.data || (rss.length ? [] : await withBudget(gdeltRequest, POOL_BUDGET_MS, []));
   return [...rss, ...gdelt.map(item => normalizedFeedItem(item, 'headline'))]
     .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
 }
@@ -951,7 +988,7 @@ function selectHeadlineItems(items, requestedSources = null) {
 
 async function fetchHeadlines(requestedSources = null) {
   if (requestedSources?.size === 0) return [];
-  const pool = await dedupeRequest('headline-pool', loadHeadlinePool);
+  const pool = await loadHeadlinePool(requestedSources);
   return selectHeadlineItems(pool, requestedSources);
 }
 
@@ -1886,14 +1923,13 @@ function parseRequestedTechSources(value) { return parseRequestedSources(value, 
 function selectTechItems(items, requestedSources = null) { return selectCategoryItems(items, requestedSources, 60, 5); }
 async function fetchTechNews(requestedSources = null) {
   if (requestedSources?.size === 0) return [];
-  const pool = await dedupeRequest('tech-pool', () => loadCategoryPool('tech', 'tech'));
+  const pool = await loadCategoryPool('tech', 'tech', requestedSources);
   return selectTechItems(pool, requestedSources);
 }
 
 // ============================================
 // Fetch Science News and Journals (RSS/Atom)
 // ============================================
-async function loadSciencePool() { return loadCategoryPool('science', 'science'); }
 
 function selectScienceItems(items, requestedSources = null) {
   const eligible = requestedSources === null
@@ -1907,9 +1943,7 @@ function selectScienceItems(items, requestedSources = null) {
 
 async function fetchScienceNews(requestedSources = null) {
   if (requestedSources?.size === 0) return [];
-  if (isCacheValid('science')) return selectScienceItems(cache.science.data, requestedSources);
-  const completed = await withBudget(dedupeRequest('science-pool', loadSciencePool), 10000, null);
-  const pool = completed || cache.science.data || [];
+  const pool = await loadCategoryPool('science', 'science', requestedSources);
   return selectScienceItems(pool, requestedSources);
 }
 
@@ -1931,7 +1965,6 @@ function parseRequestedScienceSources(value) {
 function normalizeFinanceItems(items) {
   return normalizeCategoryItems(items.filter(item => !isPromotionalEntry(item) && isFinanceEntry(item)), 'headline');
 }
-async function loadFinancePool() { return loadCategoryPool('finance', 'headline'); }
 
 function selectFinanceItems(items, requestedSources = null) {
   const eligible = requestedSources === null
@@ -1942,7 +1975,7 @@ function selectFinanceItems(items, requestedSources = null) {
 
 async function fetchFinanceNews(requestedSources = null) {
   if (requestedSources?.size === 0) return [];
-  const pool = await dedupeRequest('finance-pool', loadFinancePool);
+  const pool = await loadCategoryPool('finance', 'headline', requestedSources);
   return selectFinanceItems(pool, requestedSources);
 }
 
@@ -1957,7 +1990,6 @@ function parseRequestedFinanceSources(value) {
 // ============================================
 // Fetch Local News (DC and Alexandria)
 // ============================================
-async function loadLocalPool() { return loadCategoryPool('local', 'local'); }
 
 function selectLocalItems(items, requestedSources = null) {
   const eligible = requestedSources === null
@@ -1968,7 +2000,7 @@ function selectLocalItems(items, requestedSources = null) {
 
 async function fetchLocalNews(requestedSources = null) {
   if (requestedSources?.size === 0) return [];
-  const pool = await dedupeRequest('local-pool', loadLocalPool);
+  const pool = await loadCategoryPool('local', 'local', requestedSources);
   return selectLocalItems(pool, requestedSources);
 }
 
@@ -2012,37 +2044,33 @@ function normalizeCustomFeedDefinitions(value) {
 }
 
 async function fetchCustomFeeds(definitions) {
-  const results = await Promise.all(definitions.map(async feed => {
-    try {
-      const { data } = await fetch(feed.url, {
-        accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
-        headers: { 'User-Agent': 'BlakeNewsNow/0.4 (user RSS feed)' },
-        label: `Custom ${feed.name}`,
-      });
-      const items = filterRecentItems(parseRSS(data, feed.name), {
-        maxAgeMs: CONTENT_MAX_AGE.headlines,
-      });
-      return items.map(item => ({
-        id: stableId('custom', item.title, item.source),
-        title: item.title,
-        source: item.source,
-        timestamp: item.pubDate.toISOString(),
-        link: item.link,
-        description: item.description,
-      }));
-    } catch (err) {
-      console.error(`[DATA] Custom ${feed.name} failed:`, describeError(err));
-      return [];
-    }
-  }));
-
-  const allItems = results.flat().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const current = () => definitions.flatMap(feed => currentSnapshotItems('custom', feed, CONTENT_MAX_AGE.headlines));
+  const pending = definitions.flatMap(feed => {
+    const key = snapshotKey('custom', feed);
+    const existing = snapshots.get(key);
+    if (existing && Date.now() - existing.at < 60000) return [];
+    if (!inFlightRequests.has(`custom:${key}`) && Date.now() - (feedAttempts.get(key) || 0) < 60000) return [];
+    return [dedupeRequest(`custom:${key}`, async () => {
+      feedAttempts.set(key, Date.now());
+      try {
+        const { data } = await fetch(feed.url, {
+          accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+          headers: { 'User-Agent': 'BlakeNewsNow/0.4 (user RSS feed)' }, label: `Custom ${feed.name}`,
+        });
+        const parsed = parseRSS(data, feed.name);
+        if (!parsed.length) throw new Error('Response contains no parseable entries');
+        const items = filterRecentItems(parsed, { maxAgeMs: CONTENT_MAX_AGE.headlines });
+        snapshots.set(key, normalizeCategoryItems(items, 'custom'));
+      } catch (err) { console.error(`[DATA] Custom ${feed.name} failed:`, describeError(err)); }
+    })];
+  });
+  if (!current().length) await withBudget(Promise.all(pending), POOL_BUDGET_MS, null);
+  const allItems = current().sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
   const seen = new Set();
   return selectDiverseItems(allItems.filter(item => {
     const key = item.title.toLowerCase().replace(/\s+/g, ' ').trim();
     if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+    seen.add(key); return true;
   }), 50, 8);
 }
 
@@ -2415,6 +2443,24 @@ async function fetchFourChan() {
 // Express Route Handlers
 // ============================================
 function registerRoutes(app) {
+  app.use('/api', (req, res, next) => {
+    const category = req.path.slice(1);
+    const original = res.json.bind(res);
+    res.json = data => {
+      if (RSS_FEEDS[category]) {
+        const requested = parseRequestedSources(req.query.sources, RSS_FEEDS[category]);
+        const pending = RSS_FEEDS[category].some(feed => (requested === null || requested.has(feed.name))
+          && inFlightRequests.has(`parsed:${snapshotKey(category, feed)}`));
+        res.set('X-Feed-Updating', pending || (category === 'headlines' && inFlightRequests.has('gdelt-pool')) ? '1' : '0');
+      }
+      if (category === 'custom') {
+        const definitions = normalizeCustomFeedDefinitions(req.query.feeds);
+        res.set('X-Feed-Updating', definitions.some(feed => inFlightRequests.has(`custom:${snapshotKey('custom', feed)}`)) ? '1' : '0');
+      }
+      return original(data);
+    };
+    next();
+  });
   app.get('/api/source-health', (_req, res) => res.json(getSourceHealth()));
   app.get('/api/finance', async (req, res) => {
     try {

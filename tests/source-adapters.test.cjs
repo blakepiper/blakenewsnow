@@ -76,7 +76,7 @@ test('health retains successful history when a source fails later', () => {
 
 test('empty tech and social selections return without network calls', async () => {
   const routes = new Map();
-  registerRoutes({ get: (path, handler) => routes.set(path, handler) });
+  registerRoutes({ use: () => {}, get: (path, handler) => routes.set(path, handler) });
   for (const path of ['/api/tech', '/api/lemmy', '/api/open-social', '/api/hackernews', '/api/4chan']) {
     let response;
     await routes.get(path)({ query: { sources: '' } }, { json: data => response = data });

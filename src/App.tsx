@@ -1,3 +1,4 @@
+import { useMediaQuery } from './hooks/useMediaQuery';
 import { lazy, Suspense, useState, useCallback, useMemo } from 'react';
 import {
   Weather,
@@ -43,6 +44,8 @@ function App() {
     resizePane,
   } = useSettings();
 
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+
   // UI State
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -72,27 +75,25 @@ function App() {
   const { items, briefingItems, loading, error, newItemIds, refresh } = useUnifiedFeed(enabledSources, customFeeds);
 
   // Filter items for search (flat list for search compatibility)
-  const allHeadlines = items.map(item => ({
+  const allHeadlines = useMemo(() => showSearch ? items.map(item => ({
     id: item.id,
     title: item.title,
     source: item.source,
     timestamp: item.timestamp,
     link: item.link,
     type: item.sourceType,
-  }));
+  })) : [], [items, showSearch]);
 
   // Filtered items for keyboard nav count
-  const visibleItems = activeFilter === 'finance'
+  const visibleItems = useMemo(() => activeFilter === 'finance'
     ? items.filter(item => matchesFinanceFilter(item))
-    : items;
-  const visibleBriefingItems = activeFilter === 'finance'
+    : items, [items, activeFilter]);
+  const visibleBriefingItems = useMemo(() => activeFilter === 'finance'
     ? briefingItems.filter(item => matchesFinanceFilter(item))
-    : briefingItems;
-  const filteredItems = visibleItems.filter(item => {
-    if (activeFilter === 'finance') return true;
-    if (activeFilter === 'all') return true;
+    : briefingItems, [briefingItems, activeFilter]);
+  const filteredItems = useMemo(() => activeFilter === 'all' || activeFilter === 'finance' ? visibleItems : visibleItems.filter(item => {
     return item.sourceType === activeFilter;
-  });
+  }), [visibleItems, activeFilter]);
 
   const handleFilterChange = useCallback((filter: FilterType) => {
     setActiveFilter(filter);
@@ -219,16 +220,16 @@ function App() {
         />
 
         {/* Desktop sidebar */}
-        <Sidebar
+        {isDesktop && <Sidebar
           zip={settings.location.zip}
           collapsedSections={settings.collapsedSections}
           onToggleSection={toggleSection}
           paneSizes={settings.paneSizes}
           onResizePane={resizePane}
-        />
+        />}
 
         {/* Mobile: Markets view */}
-        {activeView === 'markets' && (
+        {!isDesktop && activeView === 'markets' && (
           <div className="flex-1 overflow-y-auto md:hidden feed-scroll">
             <div className="p-3">
               <h2 className="text-white/60 text-xs font-medium uppercase tracking-wide mb-2">Markets & Crypto</h2>
@@ -244,7 +245,7 @@ function App() {
         )}
 
         {/* Mobile: Weather view */}
-        {activeView === 'weather' && (
+        {!isDesktop && activeView === 'weather' && (
           <div className="flex-1 overflow-y-auto md:hidden feed-scroll">
             <div className="h-[250px]">
               <Weather zip={settings.location.zip} />
@@ -288,7 +289,7 @@ function App() {
 
       {/* Bottom Ticker — desktop only */}
       <div className="hidden md:block h-6 overflow-hidden relative shrink-0 border-t border-white/10">
-        <Ticker />
+        {isDesktop && <Ticker />}
       </div>
 
       {/* Bottom Tab Bar — mobile only */}

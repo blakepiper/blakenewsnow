@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, memo, useEffect, useRef, useState } from 'react';
 import { Weather } from './Weather';
 import { Predictions } from './Predictions';
 import { Financial } from './Financial';
@@ -14,6 +14,18 @@ interface SidebarProps {
   onToggleSection: (sectionId: string) => void;
   paneSizes: PaneSizes;
   onResizePane: (pane: keyof PaneSizes, delta: number) => void;
+}
+
+function VisiblePanel({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!ref.current) return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={ref} className="flex-1 min-h-0 overflow-hidden">{visible && children}</div>;
 }
 
 function SidebarSection({
@@ -48,12 +60,12 @@ function SidebarSection({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      {!collapsed && <div className="flex-1 min-h-0 overflow-hidden">{children}</div>}
+      {!collapsed && <VisiblePanel>{children}</VisiblePanel>}
     </div>
   );
 }
 
-export function Sidebar({
+export const Sidebar = memo(function Sidebar({
   zip,
   collapsedSections,
   onToggleSection,
@@ -130,4 +142,4 @@ export function Sidebar({
       })}
     </aside>
   );
-}
+});

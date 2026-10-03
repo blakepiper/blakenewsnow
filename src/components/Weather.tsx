@@ -1,3 +1,6 @@
+import { usePollingQuery } from '../hooks/usePollingQuery';
+import { usePageVisible } from '../hooks/usePageVisible';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE, REFRESH_INTERVALS, ANIMATION_INTERVALS } from '../config';
 
@@ -83,72 +86,52 @@ interface WeatherProps {
 }
 
 export function Weather({ zip = '22314' }: WeatherProps) {
-  const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [radar, setRadar] = useState<RadarData | null>(null);
+  const { data: weather } = usePollingQuery<WeatherData>(`${API_BASE}/api/weather?zip=${encodeURIComponent(zip)}`, REFRESH_INTERVALS.weather);
+  const { data: radar } = usePollingQuery<RadarData>(`${API_BASE}/api/radar`, REFRESH_INTERVALS.radar);
+  const visible = usePageVisible();
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   const [radarFrame, setRadarFrame] = useState(0);
   const [radarPlaying, setRadarPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const baseCompositeRef = useRef<HTMLCanvasElement | null>(null);
   const baseTilesRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const validRadarKeys = useRef(new Set<string>());
   const radarTilesRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const drawRef = useRef<() => void>(() => {});
+  const pendingDraw = useRef(0);
+  const scheduleDraw = useCallback(() => {
+    if (pendingDraw.current) return;
+    pendingDraw.current = requestAnimationFrame(() => { pendingDraw.current = 0; drawRef.current(); });
+  }, []);
   const loadedBaseRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Clock
   useEffect(() => {
+    if (!visible) return;
     const interval = setInterval(() => setCurrentTime(new Date()), ANIMATION_INTERVALS.clock);
     return () => clearInterval(interval);
-  }, []);
-
-  // Fetch weather
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch(`${API_BASE}/api/weather?zip=${zip}`);
-        if (res.ok) setWeather(await res.json());
-      } catch (e) {
-        console.error('Weather error:', e);
-      }
-    }
-    load();
-    const interval = setInterval(load, REFRESH_INTERVALS.weather);
-    return () => clearInterval(interval);
-  }, [zip]);
-
-  // Fetch radar metadata
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch(`${API_BASE}/api/radar`);
-        if (res.ok) {
-          const data = await res.json();
-          setRadar(data);
-          setRadarFrame(0);
-        }
-      } catch (e) {
-        console.error('Radar error:', e);
-      }
-    }
-    load();
-    const interval = setInterval(load, REFRESH_INTERVALS.radar);
-    return () => clearInterval(interval);
-  }, []);
+  }, [visible]);
 
   // Animate radar frames
   useEffect(() => {
-    if (!radar || radar.frames.length === 0 || !radarPlaying) return;
+    if (!radar || radar.frames.length === 0 || !radarPlaying || !visible || reduceMotion) return;
     const interval = setInterval(() => {
       setRadarFrame((prev) => (prev + 1) % radar.frames.length);
     }, ANIMATION_INTERVALS.radarFrame);
     return () => clearInterval(interval);
-  }, [radar, radarPlaying]);
+  }, [radar, radarPlaying, visible, reduceMotion]);
 
   // Load OpenStreetMap tiles directly so browser caching and referrers are preserved.
   useEffect(() => {
     if (!weather) return;
     loadedBaseRef.current = false;
     baseTilesRef.current.clear();
+    baseCompositeRef.current = null;
+    radarTilesRef.current.clear();
+    let cancelled = false;
 
     const { x: cx, y: cy } = latLonToTile(weather.lat, weather.lon, ZOOM);
     const startX = cx - Math.floor(GRID_COLS / 2);
@@ -156,6 +139,30 @@ export function Weather({ zip = '22314' }: WeatherProps) {
 
     let loaded = 0;
     const total = GRID_COLS * GRID_ROWS;
+    const finishBase = () => {
+      if (loaded !== total || cancelled) return;
+      const composite = document.createElement('canvas');
+      composite.width = GRID_COLS * TILE_SIZE;
+      composite.height = GRID_ROWS * TILE_SIZE;
+      const context = composite.getContext('2d');
+      if (!context) return;
+      context.fillStyle = '#1a1a18'; context.fillRect(0, 0, composite.width, composite.height);
+      for (let row = 0; row < GRID_ROWS; row++) {
+        for (let col = 0; col < GRID_COLS; col++) {
+          const image = baseTilesRef.current.get(`${startX + col},${startY + row}`);
+          if (image) context.drawImage(image, col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+      }
+      // The map and its tint are static. Composite them once instead of repainting
+      // two expensive blend passes for every animated radar frame.
+      context.globalCompositeOperation = 'multiply'; context.fillStyle = '#8a8070';
+      context.fillRect(0, 0, composite.width, composite.height);
+      context.globalCompositeOperation = 'color-burn'; context.globalAlpha = 0.15; context.fillStyle = '#1a3050';
+      context.fillRect(0, 0, composite.width, composite.height);
+      baseCompositeRef.current = composite;
+      loadedBaseRef.current = true;
+      scheduleDraw();
+    };
 
     for (let row = 0; row < GRID_ROWS; row++) {
       for (let col = 0; col < GRID_COLS; col++) {
@@ -165,32 +172,29 @@ export function Weather({ zip = '22314' }: WeatherProps) {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
+          if (cancelled) return;
           baseTilesRef.current.set(key, img);
           loaded++;
-          if (loaded === total) {
-            loadedBaseRef.current = true;
-            drawRadar();
-          }
+          finishBase();
         };
         img.onerror = () => {
+          if (cancelled) return;
           loaded++;
-          if (loaded === total) {
-            loadedBaseRef.current = true;
-            drawRadar();
-          }
+          finishBase();
         };
         img.src = `https://tile.openstreetmap.org/${ZOOM}/${tx}/${ty}.png`;
       }
     }
+    return () => { cancelled = true; };
     // Tile loading only depends on the map center. Image callbacks retain this render's draw function.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weather?.lat, weather?.lon]);
 
   // Load radar overlay tiles for current frame
   useEffect(() => {
-    if (!weather || !radar || radar.frames.length === 0) return;
+    if (!visible || !weather || !radar || radar.frames.length === 0) return;
 
-    const frame = radar.frames[radarFrame];
+    const frame = radar.frames[radarFrame % radar.frames.length];
     if (!frame) return;
 
     const { x: cx, y: cy } = latLonToTile(weather.lat, weather.lon, ZOOM);
@@ -198,9 +202,15 @@ export function Weather({ zip = '22314' }: WeatherProps) {
     const startY = cy - Math.floor(GRID_ROWS / 2);
 
     const frameKey = `f${frame.time}-${cx},${cy}`;
+    // Retain only frames still advertised for this map location (six images each).
+    const allowed = new Set(radar.frames.slice(-24).map(f => `f${f.time}-${cx},${cy}`));
+    for (const key of radarTilesRef.current.keys()) {
+      if (!allowed.has(key.slice(0, key.lastIndexOf('-')))) radarTilesRef.current.delete(key);
+    }
+    validRadarKeys.current = allowed;
     // Check if already cached
     if (radarTilesRef.current.has(`${frameKey}-0,0`)) {
-      drawRadar();
+      scheduleDraw();
       return;
     }
 
@@ -218,20 +228,21 @@ export function Weather({ zip = '22314' }: WeatherProps) {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
+          if (!validRadarKeys.current.has(frameKey)) return;
           radarTilesRef.current.set(key, img);
           loaded++;
-          if (loaded === total) drawRadar();
+          if (loaded === total) scheduleDraw();
         };
         img.onerror = () => {
           loaded++;
-          if (loaded === total) drawRadar();
+          if (loaded === total) scheduleDraw();
         };
         img.src = proxiedUrl;
       }
     }
     // The frame and map center fully identify the tile set loaded by this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weather?.lat, weather?.lon, radar, radarFrame]);
+  }, [weather?.lat, weather?.lon, radar, radarFrame, visible]);
 
   // Draw the composite radar on canvas
   const drawRadar = useCallback(() => {
@@ -244,14 +255,14 @@ export function Weather({ zip = '22314' }: WeatherProps) {
     const cw = rect.width;
     const ch = rect.height;
 
-    canvas.width = cw * dpr;
-    canvas.height = ch * dpr;
-    canvas.style.width = `${cw}px`;
-    canvas.style.height = `${ch}px`;
+    if (cw <= 0 || ch <= 0 || document.visibilityState === 'hidden') return;
+    const width = Math.round(cw * dpr), height = Math.round(ch * dpr);
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Total grid pixel size
     const gridW = GRID_COLS * TILE_SIZE;
@@ -272,39 +283,12 @@ export function Weather({ zip = '22314' }: WeatherProps) {
     ctx.scale(scale, scale);
 
     const { x: cx, y: cy } = latLonToTile(weather.lat, weather.lon, ZOOM);
-    const startX = cx - Math.floor(GRID_COLS / 2);
-    const startY = cy - Math.floor(GRID_ROWS / 2);
-
-    // Draw light base map tiles
-    ctx.globalAlpha = 1;
-    for (let row = 0; row < GRID_ROWS; row++) {
-      for (let col = 0; col < GRID_COLS; col++) {
-        const tx = startX + col;
-        const ty = startY + row;
-        const key = `${tx},${ty}`;
-        const img = baseTilesRef.current.get(key);
-        if (img) {
-          ctx.drawImage(img, col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        }
-      }
-    }
-
-    // Two-pass tint: darken with multiply, then tint water blue with a second pass.
-    // Pass 1: warm multiply — land (#fff) → #8a8070 (warm gray), water (#aad) → darker blue
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = '#8a8070';
-    ctx.fillRect(0, 0, gridW, gridH);
-    // Pass 2: darken water further with a blue overlay to boost land/sea contrast
-    ctx.globalCompositeOperation = 'color-burn';
-    ctx.globalAlpha = 0.15;
-    ctx.fillStyle = '#1a3050';
-    ctx.fillRect(0, 0, gridW, gridH);
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
+    // Reuse the tinted basemap; only the precipitation overlay changes.
+    if (baseCompositeRef.current) ctx.drawImage(baseCompositeRef.current, 0, 0);
 
     // Draw radar overlay tiles
     if (radar && radar.frames.length > 0) {
-      const frame = radar.frames[radarFrame];
+      const frame = radar.frames[radarFrame % radar.frames.length];
       if (frame) {
         const frameKey = `f${frame.time}-${cx},${cy}`;
         ctx.globalAlpha = 0.85;
@@ -348,15 +332,21 @@ export function Weather({ zip = '22314' }: WeatherProps) {
     ctx.restore();
   }, [weather, radar, radarFrame]);
 
+  useEffect(() => {
+    drawRef.current = drawRadar;
+    scheduleDraw();
+  }, [drawRadar, scheduleDraw]);
+
+  const hasWeather = !!weather;
   // Redraw on resize
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const onResize = () => drawRadar();
+    const onResize = scheduleDraw;
     const observer = new ResizeObserver(onResize);
     observer.observe(container);
-    return () => observer.disconnect();
-  }, [drawRadar]);
+    return () => { observer.disconnect(); cancelAnimationFrame(pendingDraw.current); pendingDraw.current = 0; };
+  }, [scheduleDraw, hasWeather]);
 
   const toggleRadar = useCallback(() => {
     setRadarPlaying((prev) => !prev);
@@ -372,9 +362,9 @@ export function Weather({ zip = '22314' }: WeatherProps) {
 
   const frameTime =
     radar && radar.frames.length > 0
-      ? new Date(radar.frames[radarFrame]?.time * 1000)
+      ? new Date(radar.frames[radarFrame % radar.frames.length]?.time * 1000)
       : null;
-  const isNowcast = radar?.frames[radarFrame]?.isNowcast;
+  const isNowcast = radar?.frames[radarFrame % radar.frames.length]?.isNowcast;
 
   return (
     <div className="h-full flex flex-col md:flex-row overflow-hidden">
@@ -462,9 +452,9 @@ export function Weather({ zip = '22314' }: WeatherProps) {
             <span className="text-[8px] text-white/50">{radarPlaying ? '▶' : '⏸'}</span>
             <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden relative">
               <div
-                className="h-full bg-blue-500/60 rounded-full transition-all duration-300"
+                className="h-full w-full origin-left bg-blue-500/60 rounded-full transition-transform duration-300 motion-reduce:transition-none"
                 style={{
-                  width: `${((radarFrame + 1) / radar.frames.length) * 100}%`,
+                  transform: `scaleX(${((radarFrame % radar.frames.length) + 1) / radar.frames.length})`,
                 }}
               />
               {/* Nowcast divider */}

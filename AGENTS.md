@@ -18,6 +18,18 @@ npm start
 Run `npm run lint`, `npm run test:unit`, and `npm run build` before handing off changes.
 `npm run test:api` and `npm run audit:sources` contact live upstream services.
 
+## Performance invariants
+
+- `./blakenewsnow` serves a cached production build and API on port 3000; use
+  `./blakenewsnow --dev` for Vite and API watch mode.
+- Deliver feed categories independently. Cold RSS responses have a bounded wait;
+  background completion must remain observable through `X-Feed-Updating`.
+- Revalidate persisted snapshots against source freshness windows on every read.
+  Keep caches bounded and preserve last valid source records during upstream failures.
+- Use shared, abortable polling; pause requests and animations when the page is hidden.
+  Mount widgets only for the active layout and visible sidebar sections.
+- Preserve SSRF protections and defer heavy article parsing dependencies until extraction.
+
 ## Stack
 
 - React 19 and TypeScript
@@ -56,8 +68,8 @@ server/
 - Preserve corroborating reports for the briefing while deduplicating the visible feed.
 - Group canonical article links and coauthored publications with all source/author
   associations. Social activity/indexing dates must not masquerade as article publication dates.
-- Keep optional anonymous boards and Bluesky Discover disabled by default. Preserve
-  later explicit user selections after the one-time source-policy migration.
+- Enable all social sources by default, including Bluesky Discover and anonymous
+  boards. Enable them once for older saved settings, then preserve later user choices.
 - Use `server/source-adapters.cjs` for both live ingestion and source auditing; expose
   delivery failures through `/api/source-health` and Settings.
 - Count known syndicated copies as one independent report.

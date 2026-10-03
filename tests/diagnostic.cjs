@@ -12,7 +12,7 @@ const http = require('http');
 const https = require('https');
 const { URL } = require('url');
 
-const API_BASE = 'http://localhost:3001';
+const API_BASE = process.env.API_BASE || 'http://localhost:3001';
 const TIMEOUT = 15000;
 
 // Colors for terminal output

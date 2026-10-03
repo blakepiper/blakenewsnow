@@ -54,6 +54,7 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'dw', name: 'DW', enabled: true, category: 'news', priority: 4 },
   { id: 'guardian', name: 'Guardian', enabled: true, category: 'news', priority: 5 },
   { id: 'aljazeera', name: 'Al Jazeera', enabled: true, category: 'news', priority: 6 },
+  { id: 'haaretz', name: 'Haaretz', enabled: true, category: 'news', priority: 6 },
   { id: 'abc', name: 'ABC News', enabled: true, category: 'news', priority: 7 },
   { id: 'cbs', name: 'CBS News', enabled: true, category: 'news', priority: 8 },
   { id: 'nytimes', name: 'NY Times', enabled: true, category: 'news', priority: 9 },
@@ -92,7 +93,7 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'icij', name: 'ICIJ', enabled: true, category: 'news', priority: 50 },
   { id: 'bellingcat', name: 'Bellingcat', enabled: true, category: 'news', priority: 51 },
   // Tech
-  { id: '4chan-g', name: '4chan /g/', apiSources: ['/g/'], enabled: false, category: 'tech', priority: 77 },
+  { id: '4chan-g', name: '4chan /g/', apiSources: ['/g/'], enabled: true, category: 'tech', priority: 77 },
   { id: 'hackernews', name: 'Hacker News', enabled: true, category: 'tech', priority: 52 },
   { id: 'arstechnica', name: 'Ars Technica', enabled: true, category: 'tech', priority: 53 },
   { id: 'theverge', name: 'The Verge', enabled: true, category: 'tech', priority: 54 },
@@ -120,12 +121,12 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'lemmy-technology', name: 'Lemmy c/technology', apiSources: ['c/technology'], enabled: true, category: 'social', priority: 38 },
   { id: 'lemmy-politics', name: 'Lemmy c/politics', apiSources: ['c/politics'], enabled: true, category: 'social', priority: 39 },
   { id: 'lemmy-science', name: 'Lemmy c/science', apiSources: ['c/science'], enabled: true, category: 'social', priority: 40 },
-  { id: 'bluesky-discover', name: 'Bluesky Discover', enabled: false, category: 'social', priority: 41 },
+  { id: 'bluesky-discover', name: 'Bluesky Discover', enabled: true, category: 'social', priority: 41 },
   { id: 'mastodon-trending', name: 'Mastodon Trending', enabled: true, category: 'social', priority: 42 },
-  { id: '4chan-news', name: '4chan /news/', apiSources: ['/news/'], enabled: false, category: 'social', priority: 43 },
-  { id: '4chan-pol', name: '4chan /pol/', apiSources: ['/pol/'], enabled: false, category: 'social', priority: 44 },
-  { id: '4chan-lit', name: '4chan /lit/', apiSources: ['/lit/'], enabled: false, category: 'social', priority: 45 },
-  { id: '4chan-his', name: '4chan /his/', apiSources: ['/his/'], enabled: false, category: 'social', priority: 46 },
+  { id: '4chan-news', name: '4chan /news/', apiSources: ['/news/'], enabled: true, category: 'social', priority: 43 },
+  { id: '4chan-pol', name: '4chan /pol/', apiSources: ['/pol/'], enabled: true, category: 'social', priority: 44 },
+  { id: '4chan-lit', name: '4chan /lit/', apiSources: ['/lit/'], enabled: true, category: 'social', priority: 45 },
+  { id: '4chan-his', name: '4chan /his/', apiSources: ['/his/'], enabled: true, category: 'social', priority: 46 },
   // Science news
   { id: 'science-daily', name: 'ScienceDaily', enabled: true, category: 'science', priority: 46 },
   { id: 'phys-org', name: 'Phys.org', enabled: true, category: 'science', priority: 47 },
@@ -261,7 +262,7 @@ const DEFAULT_SETTINGS: Settings = {
     city: 'Alexandria, VA',
     useGeolocation: false,
   },
-  sourcePolicyVersion: 1,
+  sourcePolicyVersion: 2,
   sources: DEFAULT_SOURCES,
   customFeeds: [],
   layout: 'compact',
@@ -293,8 +294,8 @@ export function loadSettings(): Settings {
         ...parsed,
         location: { ...DEFAULT_SETTINGS.location, ...parsed.location },
         paneSizes: { ...DEFAULT_SETTINGS.paneSizes, ...parsed.paneSizes },
-        sources: mergeSourceConfigs(DEFAULT_SOURCES, parsed.sources || [], (parsed.sourcePolicyVersion || 0) < 1),
-        sourcePolicyVersion: 1,
+        sources: mergeSourceConfigs(DEFAULT_SOURCES, parsed.sources || [], (parsed.sourcePolicyVersion || 0) < 2),
+        sourcePolicyVersion: 2,
       };
     }
   } catch (err) {
@@ -311,12 +312,13 @@ export function saveSettings(settings: Settings): void {
   }
 }
 
-export function mergeSourceConfigs(defaults: SourceConfig[], stored: SourceConfig[], applySourceAudit = false): SourceConfig[] {
+export function mergeSourceConfigs(defaults: SourceConfig[], stored: SourceConfig[], applySocialDefaults = false): SourceConfig[] {
   const storedMap = new Map(stored.map(s => [s.id, s]));
   return defaults.map(def => {
     const existing = storedMap.get(def.id);
     if (existing) {
-      return { ...def, enabled: applySourceAudit && !def.enabled ? false : existing.enabled, priority: existing.priority };
+      const social = def.category === 'social' || ['4chan-g', 'hackernews', 'lobsters'].includes(def.id);
+      return { ...def, enabled: applySocialDefaults && social ? true : existing.enabled, priority: existing.priority };
     }
     return def;
   });
