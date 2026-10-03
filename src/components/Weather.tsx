@@ -2,7 +2,7 @@ import { usePollingQuery } from '../hooks/usePollingQuery';
 import { usePageVisible } from '../hooks/usePageVisible';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { API_BASE, REFRESH_INTERVALS, ANIMATION_INTERVALS } from '../config';
+import { API_BASE, RADAR_BASEMAP, REFRESH_INTERVALS, ANIMATION_INTERVALS } from '../config';
 
 interface WeatherData {
   temperature: number;
@@ -93,6 +93,7 @@ export function Weather({ zip = '22314' }: WeatherProps) {
   const [radarFrame, setRadarFrame] = useState(0);
   const [radarPlaying, setRadarPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [baseMapUnavailable, setBaseMapUnavailable] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baseCompositeRef = useRef<HTMLCanvasElement | null>(null);
@@ -124,7 +125,7 @@ export function Weather({ zip = '22314' }: WeatherProps) {
     return () => clearInterval(interval);
   }, [radar, radarPlaying, visible, reduceMotion]);
 
-  // Load OpenStreetMap tiles directly so browser caching and referrers are preserved.
+  // Load the USGS basemap directly, preserving browser caching and CORS.
   useEffect(() => {
     if (!weather) return;
     loadedBaseRef.current = false;
@@ -138,9 +139,11 @@ export function Weather({ zip = '22314' }: WeatherProps) {
     const startY = cy - Math.floor(GRID_ROWS / 2);
 
     let loaded = 0;
+    let failed = 0;
     const total = GRID_COLS * GRID_ROWS;
     const finishBase = () => {
       if (loaded !== total || cancelled) return;
+      setBaseMapUnavailable(failed > 0);
       const composite = document.createElement('canvas');
       composite.width = GRID_COLS * TILE_SIZE;
       composite.height = GRID_ROWS * TILE_SIZE;
@@ -179,12 +182,15 @@ export function Weather({ zip = '22314' }: WeatherProps) {
         };
         img.onerror = () => {
           if (cancelled) return;
+          failed++;
           loaded++;
           finishBase();
         };
-        // OSM requires the page's origin even when an embedding host strips referrers.
         img.referrerPolicy = 'origin';
-        img.src = `https://tile.openstreetmap.org/${ZOOM}/${tx}/${ty}.png`;
+        img.src = RADAR_BASEMAP.tileUrl
+          .replaceAll('{z}', String(ZOOM))
+          .replaceAll('{x}', String(tx))
+          .replaceAll('{y}', String(ty));
       }
     }
     return () => { cancelled = true; };
@@ -428,11 +434,17 @@ export function Weather({ zip = '22314' }: WeatherProps) {
       >
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
+        {baseMapUnavailable && (
+          <div role="status" className="absolute top-4 left-1 bg-black/80 px-1 text-[9px] text-white/80">
+            Map background unavailable
+          </div>
+        )}
+
         <div
           className="absolute bottom-5 right-1 bg-black/80 px-1 text-[9px] text-white/80"
           onClick={(event) => event.stopPropagation()}
         >
-          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="hover:underline">OpenStreetMap</a> contributors
+          <a href={RADAR_BASEMAP.attributionUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">{RADAR_BASEMAP.attribution}</a>
           {' · '}<a href="https://www.rainviewer.com/" target="_blank" rel="noopener noreferrer" className="hover:underline">RainViewer</a>
         </div>
 

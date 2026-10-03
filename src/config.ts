@@ -6,6 +6,14 @@
 // API Configuration
 export const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '');
 
+// USGS uses Web Mercator tiles with row (y) before column (x). Fetch directly
+// to preserve its daily browser cache; no API key or mapping library is needed.
+export const RADAR_BASEMAP = {
+  tileUrl: import.meta.env.VITE_RADAR_BASEMAP_URL || 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}',
+  attribution: import.meta.env.VITE_RADAR_BASEMAP_ATTRIBUTION || 'USGS The National Map',
+  attributionUrl: import.meta.env.VITE_RADAR_BASEMAP_ATTRIBUTION_URL || 'https://www.usgs.gov/programs/national-geospatial-program/national-map',
+} as const;
+
 // Refresh Intervals (in milliseconds)
 export const REFRESH_INTERVALS = {
   headlines: 60 * 1000,      // 1 minute

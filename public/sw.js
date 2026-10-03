@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bnn-cache-v7';
+const CACHE_NAME = 'bnn-cache-v8';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -29,6 +29,11 @@ self.addEventListener('fetch', (event) => {
 
   // Skip non-GET requests
   if (request.method !== 'GET') return;
+
+  // Let third-party services control their HTTP caching. Storing map images in
+  // this stale-first cache can preserve HTTP-200 "access blocked" error tiles
+  // indefinitely and bypass the provider's expiry or revalidation rules.
+  if (url.origin !== self.location.origin) return;
 
   // API requests: network only (always want fresh data)
   if (url.pathname.startsWith('/api/')) {

@@ -104,10 +104,21 @@ Runtime configuration is provided through environment variables:
 | `PORT` | `3000` in launcher; `3001` in development | Express listening port |
 | `CORS_ORIGIN` | `http://localhost:3000,http://127.0.0.1:3000` | Comma-separated frontend origins allowed to call the API |
 | `VITE_API_URL` | Same origin in production; `http://localhost:3001` in development | API base URL embedded in the frontend build |
+| `VITE_RADAR_BASEMAP_URL` | USGS Topo tile service | Web Mercator raster URL template containing `{z}`, `{x}`, and `{y}`; the provider must support browser CORS |
+| `VITE_RADAR_BASEMAP_ATTRIBUTION` | `USGS The National Map` | Credit displayed on the radar; set this when using a different basemap provider |
+| `VITE_RADAR_BASEMAP_ATTRIBUTION_URL` | USGS National Map website | Link for the basemap provider credit |
 | `SERVE_DIST` | Unset | Set `1` to serve `dist/` with the API |
 | `FEED_CACHE_DIR` | `.blakenewsnow-cache/` | Directory for bounded, normalized feed snapshots |
 
 For a split frontend/API deployment, set `VITE_API_URL` before building the frontend and set `CORS_ORIGIN` on the API server to the deployed frontend origin.
+
+The weather radar uses USGS The National Map for its background and RainViewer for
+precipitation. USGS provides [free, public-domain map services](https://www.usgs.gov/faqs/what-are-terms-uselicensing-map-services-and-data-national-map).
+This replaces the blocked OpenStreetMap tile service without requiring an API key.
+Basemap settings are embedded at build time; `./blakenewsnow` rebuilds automatically
+when they change. A basemap outage displays a status message while precipitation
+continues to render. Third-party map images use the provider's HTTP cache rules;
+the service worker only caches assets from the application itself.
 
 Location, source selections, read state, and pane dimensions are stored locally in the browser.
 

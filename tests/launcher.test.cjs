@@ -33,6 +33,19 @@ function get(port, endpoint) {
   });
 }
 
+test('cached frontend build is invalidated when the radar provider or its attribution changes', () => {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.startsWith('VITE_')) delete env[key];
+  const fingerprint = overrides => execFileSync(process.execPath, ['scripts/build-fingerprint.cjs'], {
+    cwd: root, env: { ...env, ...overrides }, encoding: 'utf8',
+  });
+  const original = fingerprint({});
+  for (const key of ['VITE_RADAR_BASEMAP_URL', 'VITE_RADAR_BASEMAP_ATTRIBUTION', 'VITE_RADAR_BASEMAP_ATTRIBUTION_URL']) {
+    assert.notEqual(fingerprint({ [key]: 'custom-provider' }), original);
+  }
+  assert.equal(fingerprint({ PORT: '3999' }), original);
+});
+
 test('server logs requests, permits map referrers and fails clearly on an occupied port', async t => {
   const port = await freePort();
   const options = { cwd: root, env: { ...process.env, PORT: String(port), SERVE_DIST: '1' }, stdio: ['ignore','pipe','pipe'] };
