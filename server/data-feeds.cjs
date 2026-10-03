@@ -8,7 +8,10 @@ const https = require('https');
 const http = require('http');
 const zlib = require('zlib');
 const { URL } = require('url');
-const { filterRecentItems, parseAlexandriaNews, parseRSS } = require('./rss.cjs');
+const { filterRecentItems, parseRSS } = require('./rss.cjs');
+const { SCIENTIST_FEEDS } = require('./scientist-publications.cjs');
+const { parseConfiguredSource, socialProvenance } = require('./source-adapters.cjs');
+const { sourceWindowDays, sourceKind, publisherIdentity, canonicalArticleLink, isPromotionalEntry, isFinanceEntry, entryContentType } = require('../shared/source-policy.js');
 
 function stableId(prefix, title, source) {
   const hash = crypto.createHash('md5').update(`${source}:${title}`).digest('hex').slice(0, 10);
@@ -16,24 +19,28 @@ function stableId(prefix, title, source) {
 }
 
 function selectDiverseItems(items, limit, perSourceCap) {
-  const selected = [];
-  const deferred = [];
+  const selected = new Set();
   const sourceCounts = new Map();
-
+  // Reserve one item for every active source before prolific publishers fill slots.
   for (const item of items) {
-    const count = sourceCounts.get(item.source) || 0;
-    if (count < perSourceCap && selected.length < limit) {
-      selected.push(item);
-      sourceCounts.set(item.source, count + 1);
-    } else {
-      deferred.push(item);
+    if (!sourceCounts.has(item.source) && selected.size < limit) {
+      selected.add(item);
+      sourceCounts.set(item.source, 1);
     }
   }
-
-  if (selected.length < limit) {
-    selected.push(...deferred.slice(0, limit - selected.length));
+  for (const item of items) {
+    if (selected.has(item)) continue;
+    const count = sourceCounts.get(item.source) || 0;
+    if (count < perSourceCap && selected.size < limit) {
+      selected.add(item);
+      sourceCounts.set(item.source, count + 1);
+    }
   }
-  return selected.slice(0, limit);
+  for (const item of items) {
+    if (selected.size >= limit) break;
+    selected.add(item);
+  }
+  return items.filter(item => selected.has(item));
 }
 
 const LOCAL_BETTING_TERMS = /\b(?:betmgm|prophetx|kalshi|polymarket|draftkings|fanduel|bet365|caesars(?: sportsbook)?|fanatics sportsbook|sportsbook|sports betting|prediction markets?|betting odds|parlay|wager|jackpot)\b/i;
@@ -54,9 +61,14 @@ function isLocalAdOrPromotion(item) {
 
 const localFeedFilter = item => !isLocalAdOrPromotion(item);
 
+function isLocalCoverage(item) {
+  return /\b(?:washington|d\.?c\.?|alexandria|virginia|maryland|arlington|fairfax|loudoun|prince (?:william|george)|montgomery|wmata|metro|beltway|chesapeake|potomac)\b/i
+    .test(`${item.title} ${item.description || ''} ${item.link || ''}`.replace(/https?:\/\/wtop\.com/, ''));
+}
+
 // Some federal sites (sec.gov, bls.gov) reject the generic browser agent and want a
 // self-identifying client instead.
-const DECLARED_USER_AGENT = 'BlakeNewsNow/0.4 (+https://github.com/blakenewsnow; RSS reader)';
+const DECLARED_USER_AGENT = 'BlakeNewsNow/0.4 RSS reader';
 
 // ============================================
 // RSS Feed Configuration
@@ -72,9 +84,6 @@ const RSS_FEEDS = {
     { name: 'ABC News', url: 'https://abcnews.go.com/abcnews/topstories' },
     { name: 'CBS News', url: 'https://www.cbsnews.com/latest/rss/main' },
     { name: 'NY Times', url: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
-    { name: 'Bloomberg', url: 'https://feeds.bloomberg.com/markets/news.rss' },
-    { name: 'Financial Times', url: 'https://www.ft.com/rss/home' },
-    { name: 'Wall Street Journal', url: 'https://feeds.content.dowjones.io/public/rss/RSSWorldNews' },
     { name: 'PBS NewsHour', url: 'https://www.pbs.org/newshour/feeds/rss/headlines' },
     { name: 'NBC News', url: 'https://feeds.nbcnews.com/nbcnews/public/news' },
     { name: 'Axios', url: 'https://api.axios.com/feed/' },
@@ -94,7 +103,9 @@ const RSS_FEEDS = {
     { name: 'SCMP', url: 'https://www.scmp.com/rss/91/feed' },
     { name: 'El Pais', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/english.elpais.com/portada' },
     { name: 'Euronews', url: 'https://feeds.feedburner.com/euronews/en/news' },
-    { name: 'The New Humanitarian', url: 'https://www.thenewhumanitarian.org/rss.xml', maxAgeMs: 90 * 24 * 60 * 60 * 1000 },
+    { name: 'The New Humanitarian', url: 'https://www.thenewhumanitarian.org/rss/all.xml' },
+    { name: 'Daily Maverick', url: 'https://www.dailymaverick.co.za/dmrss/' },
+    { name: 'Global Voices', url: 'https://globalvoices.org/feed/' },
     { name: 'African Arguments', url: 'https://africanarguments.org/feed/' },
     { name: 'The Conversation', url: 'https://theconversation.com/us/articles.atom' },
     // Free official and primary reporting
@@ -103,20 +114,6 @@ const RSS_FEEDS = {
     { name: 'Congress.gov', url: 'https://www.congress.gov/rss/most-viewed-bills.xml', maxAgeMs: 90 * 24 * 60 * 60 * 1000 },
     { name: 'CISA', url: 'https://www.cisa.gov/cybersecurity-advisories/all.xml' },
     { name: 'NOAA', url: 'https://www.noaa.gov/rss.xml' },
-    {
-      // sec.gov 403s the generic default agent and redirects the legacy /rss path.
-      name: 'SEC',
-      url: 'https://www.sec.gov/news/pressreleases.rss',
-      headers: { 'User-Agent': DECLARED_USER_AGENT },
-    },
-    { name: 'Federal Reserve', url: 'https://www.federalreserve.gov/feeds/press_all.xml' },
-    {
-      // bls.gov 403s the generic default agent.
-      name: 'BLS',
-      url: 'https://www.bls.gov/feed/bls_latest.rss',
-      headers: { 'User-Agent': DECLARED_USER_AGENT },
-    },
-    { name: 'EIA', url: 'https://www.eia.gov/rss/todayinenergy.xml' },
     {
       name: 'FDA Press Releases',
       url: 'https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml',
@@ -131,6 +128,40 @@ const RSS_FEEDS = {
     { name: 'Snopes', url: 'https://www.snopes.com/feed/' },
     { name: 'ICIJ', url: 'https://www.icij.org/feed/' },
     { name: 'Bellingcat', url: 'https://www.bellingcat.com/feed/', maxAgeMs: 30 * 24 * 60 * 60 * 1000 },
+  ],
+  finance: [
+    { name: 'Bloomberg', url: 'https://feeds.bloomberg.com/markets/news.rss' },
+    { name: 'Financial Times', url: 'https://www.ft.com/rss/home' },
+    { name: 'Wall Street Journal', url: 'https://feeds.content.dowjones.io/public/rss/RSSMarketsMain' },
+    {
+      // sec.gov 403s the generic default agent and redirects the legacy /rss path.
+      name: 'SEC',
+      url: 'https://www.sec.gov/news/pressreleases.rss',
+      headers: { 'User-Agent': DECLARED_USER_AGENT },
+    },
+    { name: 'Federal Reserve', url: 'https://www.federalreserve.gov/feeds/press_all.xml' },
+    {
+      // bls.gov 403s the generic default agent.
+      name: 'BLS',
+      url: 'https://www.bls.gov/feed/bls_latest.rss',
+      headers: { 'User-Agent': DECLARED_USER_AGENT },
+    },
+    { name: 'EIA', url: 'https://www.eia.gov/rss/todayinenergy.xml' },
+    { name: 'CNBC Economy', url: 'https://www.cnbc.com/id/20910258/device/rss/rss.html' },
+    { name: 'CNBC IPOs', url: 'https://www.cnbc.com/id/10000666/device/rss/rss.html' },
+    { name: 'CoinDesk', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/' },
+    { name: 'BBC Business', url: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
+    { name: 'Guardian Business', url: 'https://www.theguardian.com/business/rss' },
+    { name: 'ECB', url: 'https://www.ecb.europa.eu/rss/press.html' },
+    { name: 'WTO News', url: 'https://www.wto.org/library/rss/latest_news_e.xml' },
+    { name: 'BEA', url: 'https://apps.bea.gov/rss/rss.xml' },
+    { name: 'USTR', url: 'https://ustr.gov/about-us/policy-offices/press-office/press-releases', parser: 'ustr-html' },
+    { name: 'Federal Register Trade', url: 'https://www.federalregister.gov/api/v1/documents.json?per_page=50&order=newest&conditions[term]=tariff', parser: 'federal-register' },
+    { name: 'SEC IPO Filings', url: 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=S-1&company=&dateb=&owner=include&start=0&count=40&output=atom', headers: { 'User-Agent': DECLARED_USER_AGENT }, nativeFetch: true },
+    { name: 'SEC Foreign IPO Filings', url: 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=F-1&company=&dateb=&owner=include&start=0&count=40&output=atom', headers: { 'User-Agent': DECLARED_USER_AGENT }, nativeFetch: true },
+    { name: 'Bank of Japan', url: 'https://www.boj.or.jp/en/rss/whatsnew.xml' },
+    { name: 'CFTC', url: 'https://www.cftc.gov/RSS/RSSGP/rssgp.xml', nativeFetch: true },
+    { name: 'Ethereum Foundation', url: 'https://blog.ethereum.org/en/feed.xml' },
   ],
   tech: [
     { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
@@ -234,11 +265,15 @@ const RSS_FEEDS = {
       headers: { 'User-Agent': 'BlakeNewsNow/0.4 (RSS reader)' },
     },
     { name: 'STAT', url: 'https://www.statnews.com/feed/' },
-    { name: 'WHO', url: 'https://www.who.int/rss-feeds/news-english.xml', maxAgeMs: 365 * 24 * 60 * 60 * 1000 },
+    { name: 'WHO', url: 'https://www.who.int/api/news/newsitems?$orderby=PublicationDateAndTime%20desc&$top=30', parser: 'who-json' },
+    { name: 'KFF Health News', url: 'https://kffhealthnews.org/feed/' },
     { name: 'Undark', url: 'https://undark.org/feed/' },
+    ...SCIENTIST_FEEDS,
   ],
   local: [
-    { name: 'WTOP', url: 'https://wtop.com/feed/', filter: localFeedFilter },
+    { name: 'WMATA Alerts', url: 'https://www.wmata.com/ride/alerts-and-advisories/_jcr_content/root/container/row-container/main-container/main-editable/alerts_advisories_li.results.json', parser: 'wmata', filter: localFeedFilter },
+    { name: 'Alexandria Council', url: 'https://webapi.legistar.com/v1/alexandria/events?$orderby=EventDate%20desc&$top=100', parser: 'legistar', filter: localFeedFilter },
+    { name: 'WTOP', url: 'https://wtop.com/local/feed/', filter: item => localFeedFilter(item) && isLocalCoverage(item) },
     { name: 'WAMU', url: 'https://wamu.org/feed/', filter: localFeedFilter },
     { name: 'Alexandria City', url: 'https://www.alexandriava.gov/News', parser: 'alexandria-html', maxAgeMs: 30 * 24 * 60 * 60 * 1000, filter: localFeedFilter },
     { name: 'Alexandria Times', url: 'https://alextimes.com/feed/', filter: localFeedFilter },
@@ -258,6 +293,15 @@ const RSS_FEEDS = {
   ],
 };
 
+// Server and client share freshness, rather than silently overriding source windows.
+for (const feeds of Object.values(RSS_FEEDS)) for (const feed of feeds) {
+  feed.maxAgeMs = sourceWindowDays(feed.name) * 86400000;
+  const kind = sourceKind(feed.name);
+  feed.pollIntervalMs = kind === 'author' ? 6 * 60 * 60 * 1000
+    : ['The Markup', 'Bellingcat', 'GitHub Engineering'].includes(feed.name) ? 30 * 60 * 1000
+      : kind === 'official' ? 10 * 60 * 1000 : 60 * 1000;
+}
+
 const LEMMY_COMMUNITIES = ['news', 'world', 'technology', 'politics', 'science'];
 const BLUESKY_DISCOVER_FEED = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot';
 
@@ -271,6 +315,7 @@ const HN_API = 'https://hacker-news.firebaseio.com/v0';
 const cache = {
   headlines: { data: null, timestamp: 0 },
   tech: { data: null, timestamp: 0 },
+  finance: { data: null, timestamp: 0 },
   science: { data: null, timestamp: 0 },
   local: { data: null, timestamp: 0 },
   gdelt: { data: null, timestamp: 0 },
@@ -282,6 +327,7 @@ const cache = {
   radar: { data: null, timestamp: 0 },
   predictions: { data: null, timestamp: 0 },
   polymarket: { data: null, timestamp: 0 },
+  kalshi: { data: null, timestamp: 0 },
   pizzint: { data: null, timestamp: 0 },
   lemmy: { data: null, timestamp: 0 },
   openSocial: { data: null, timestamp: 0 },
@@ -292,6 +338,7 @@ const cache = {
 
 const CACHE_TTL = {
   headlines: 60 * 1000,  // 1 minute
+  finance: 60 * 1000,    // 1 minute
   tech: 60 * 1000,       // 1 minute
   science: 60 * 1000,    // 1 minute
   local: 60 * 1000,       // 1 minute
@@ -304,6 +351,7 @@ const CACHE_TTL = {
   radar: 2 * 60 * 1000,   // 2 minutes
   predictions: 60 * 1000, // 1 minute
   polymarket: 5 * 60 * 1000,
+  kalshi: 5 * 60 * 1000,
   pizzint: 5 * 60 * 1000,
   lemmy: 2 * 60 * 1000,
   openSocial: 2 * 60 * 1000,
@@ -313,6 +361,7 @@ const CACHE_TTL = {
 
 const CONTENT_MAX_AGE = {
   headlines: 7 * 24 * 60 * 60 * 1000,
+  finance: 7 * 24 * 60 * 60 * 1000,
   tech: 7 * 24 * 60 * 60 * 1000,
   science: 7 * 24 * 60 * 60 * 1000,
   ticker: 2 * 24 * 60 * 60 * 1000,
@@ -335,10 +384,111 @@ const DEFAULT_ZIP = '22314';
 
 function isCacheValid(key) {
   const entry = cache[key];
+  if (!entry) return false;
   if (!entry.data || (Date.now() - entry.timestamp) >= CACHE_TTL[key]) return false;
-  // Don't treat empty arrays as valid cache
-  if (Array.isArray(entry.data) && entry.data.length === 0) return false;
   return true;
+}
+
+const feedDiagnostics = new Map();
+
+function normalizedFeedItem(item, prefix) {
+  return {
+    id: stableId(prefix, item.title, item.source), title: item.title, source: item.source,
+    timestamp: item.pubDate.toISOString(), link: item.link, description: item.description,
+    publisher: item.publisher || publisherIdentity(item.source), sourceKind: sourceKind(item.source),
+    contentType: item.contentType || entryContentType(item),
+    timestampKind: item.timestampKind || 'published',
+    maxAgeDays: sourceWindowDays(item.source),
+    ...(item.documentUrl ? { documentUrl: item.documentUrl } : {}),
+    ...(item.scheduledAt ? { scheduledAt: item.scheduledAt } : {}),
+    ...(item.expiresAt ? { expiresAt: item.expiresAt } : {}),
+  };
+}
+
+function normalizeCategoryItems(items, prefix) {
+  const seen = new Set();
+  return items.filter(item => filterRecentItems([item], { maxAgeMs: sourceWindowDays(item.source) * 86400000 }).length)
+    .sort((a, b) => b.pubDate - a.pubDate).filter(item => {
+      // Keep different publishers/coauthors for selection and briefing provenance.
+      const key = `${item.source}:${canonicalArticleLink(item.link)}:${item.title.trim().toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).map(item => normalizedFeedItem(item, prefix));
+}
+
+function parseRequestedSources(value, feeds) {
+  if (value === undefined) return null;
+  const allowed = new Set(feeds.map(feed => feed.name));
+  const raw = Array.isArray(value) ? value.join(',') : String(value);
+  return new Set(raw.split(',').map(x => x.trim()).filter(x => allowed.has(x)));
+}
+
+function selectCategoryItems(items, requested, limit, cap) {
+  return selectDiverseItems(requested === null ? items : items.filter(x => requested.has(x.source)), limit, cap);
+}
+
+async function loadCategoryPool(category, prefix) {
+  if (isCacheValid(category)) return cache[category].data;
+  const collected = [];
+  let arxivQueue = Promise.resolve();
+  let crossrefQueue = Promise.resolve();
+  function requestFeed(feed) {
+    const options = { accept: feed.parser && !['alexandria-html', 'ustr-html'].includes(feed.parser)
+      ? feed.provider === 'arxiv' ? 'application/atom+xml' : 'application/json'
+      : 'application/rss+xml, application/atom+xml, application/xml, text/xml, text/html' };
+    if (feed.provider === 'arxiv') {
+      const request = arxivQueue.then(() => fetchConfiguredFeed(feed, options));
+      arxivQueue = request.catch(() => {}).then(() => new Promise(resolve => setTimeout(resolve, 3100)));
+      return request;
+    }
+    if (feed.provider === 'crossref') {
+      const request = crossrefQueue.then(() => fetchConfiguredFeed(feed, options));
+      crossrefQueue = request.catch(() => {}).then(() => new Promise(resolve => setTimeout(resolve, 1500)));
+      return request;
+    }
+    return fetchConfiguredFeed(feed, options);
+  }
+  await Promise.all(RSS_FEEDS[category].map(async feed => {
+    try {
+      const { data } = await requestFeed(feed);
+      const parsed = parseConfiguredSource(data, feed);
+      if (!parsed.length && !['scientist-publications', 'legistar', 'wmata'].includes(feed.parser)) {
+        throw new Error('Response contains no parseable entries');
+      }
+      const dated = filterRecentItems(parsed, { maxAgeMs: feed.maxAgeMs });
+      const eligible = dated.filter(item => !isPromotionalEntry(item) && (!feed.filter || feed.filter(item))
+        && (category !== 'finance' || isFinanceEntry(item)));
+      const newest = parsed.filter(x => x.pubDate && Number.isFinite(+x.pubDate) && +x.pubDate <= Date.now()).sort((a, b) => b.pubDate - a.pubDate)[0];
+      feedDiagnostics.set(feed.name, { checkedAt: new Date().toISOString(), parsed: parsed.length,
+        itemCount: eligible.length, filtered: dated.length - eligible.length, newestDate: newest?.pubDate.toISOString() || null,
+        state: !eligible.length ? sourceKind(feed.name) === 'author' ? 'no-recent-publications' : 'no-recent-items' : 'ok' });
+      collected.push(...eligible);
+      // First science load can return available journals while slower author searches finish.
+      cache[category] = { data: normalizeCategoryItems(collected, prefix), timestamp: Date.now() };
+    } catch (err) {
+      feedDiagnostics.set(feed.name, { ...feedDiagnostics.get(feed.name), checkedAt: new Date().toISOString(), state: 'unavailable', error: describeError(err).slice(0, 160) });
+      console.error(`[DATA] ${feed.name}:`, describeError(err));
+    }
+  }));
+  const result = normalizeCategoryItems(collected, prefix);
+  cache[category] = { data: result, timestamp: Date.now() };
+  return result;
+}
+
+function getSourceHealth() {
+  const feeds = [...new Map(Object.values(RSS_FEEDS).flat().map(feed => [feed.name, feed])).values(),
+    ...['GDELT', 'Hacker News', 'Bluesky Discover', 'Mastodon Trending', ...LEMMY_COMMUNITIES.map(name => 'c/' + name), '/news/', '/pol/', '/lit/', '/his/', '/g/'].map(name => ({ name }))];
+  return feeds.map(feed => {
+    const transport = sourceHealth.get(feed.name) || {};
+    const content = feedDiagnostics.get(feed.name) || {};
+    return { name: feed.name, kind: sourceKind(feed.name), windowDays: sourceWindowDays(feed.name),
+      lastAttempt: transport.lastAttempt || content.checkedAt || null, lastSuccess: transport.lastSuccess || null,
+      retryAt: transport.until > Date.now() ? new Date(transport.until).toISOString() : null,
+      state: transport.failures ? 'unavailable' : content.state || (transport.lastSuccess ? 'retrieved' : 'not-checked'),
+      itemCount: content.itemCount ?? null, newestDate: content.newestDate || null,
+      error: transport.failures ? transport.error : content.state === 'unavailable' ? content.error?.replace(/HTTP (\d+):[\s\S]*/, 'HTTP $1') : undefined };
+  });
 }
 
 // ============================================
@@ -430,6 +580,7 @@ function describeError(error, depth = 0) {
 
 function isRetryableError(error) {
   if (!error) return false;
+  if (error.name === 'TimeoutError') return true;
   if (RETRYABLE_CODES.has(error.code)) return true;
   if (error.message === 'Request timeout') return true;
   if (Array.isArray(error.errors) && error.errors.some(isRetryableError)) return true;
@@ -568,12 +719,15 @@ function breakerCooldownRemaining(key) {
 }
 
 function recordSourceSuccess(key) {
-  sourceHealth.delete(key);
+  sourceHealth.set(key, { ...sourceHealth.get(key), failures: 0, until: 0,
+    lastSuccess: new Date().toISOString(), lastAttempt: new Date().toISOString() });
 }
 
-function recordSourceFailure(key) {
+function recordSourceFailure(key, error) {
   const health = sourceHealth.get(key) || { failures: 0, until: 0 };
   health.failures += 1;
+  health.lastAttempt = new Date().toISOString();
+  health.error = error ? describeError(error).replace(/HTTP (\d+):[\s\S]*/, 'HTTP $1').slice(0, 120) : 'Request failed';
   if (health.failures >= BREAKER_THRESHOLD) {
     const backoff = BREAKER_BASE_COOLDOWN_MS * 2 ** (health.failures - BREAKER_THRESHOLD);
     health.until = Date.now() + Math.min(backoff, BREAKER_MAX_COOLDOWN_MS);
@@ -602,7 +756,7 @@ async function withBreaker(key, task) {
     recordSourceSuccess(key);
     return result;
   } catch (error) {
-    recordSourceFailure(key);
+    recordSourceFailure(key, error);
     throw error;
   }
 }
@@ -619,7 +773,26 @@ function fetch(url, options = {}) {
   }, { attempts: options.retries ?? 2, label: options.label }));
 }
 
+const configuredFeedCache = new Map();
 async function fetchConfiguredFeed(feed, options = {}) {
+  const key = `${feed.url}:${JSON.stringify(feed.headers || {})}`;
+  const existing = configuredFeedCache.get(key);
+  if (existing && Date.now() - existing.at < (feed.pollIntervalMs || 60000)) return existing.response;
+  return dedupeRequest(`feed:${key}`, async () => {
+    try {
+      const response = await requestConfiguredFeed(feed, options);
+      configuredFeedCache.set(key, { at: Date.now(), response });
+      return response;
+    } catch (error) {
+      // Reuse last successful content only through the same strict date filters.
+      // Transport health still reports the failure and its last successful request.
+      if (existing) return existing.response;
+      throw error;
+    }
+  });
+}
+
+async function requestConfiguredFeed(feed, options = {}) {
   const requestOptions = {
     ...options,
     timeout: feed.timeout || options.timeout,
@@ -744,7 +917,7 @@ async function fetchGdeltArticles() {
         link,
         pubDate,
         description: article.domain ? `Indexed from ${article.domain}` : '',
-        source: 'GDELT',
+        source: 'GDELT', publisher: article.domain || new URL(link).hostname, timestampKind: 'indexed',
       }];
     });
     if (result.length > 0) cache.gdelt = { data: result, timestamp: Date.now() };
@@ -763,83 +936,21 @@ async function fetchGdeltArticles() {
 // Fetch Headlines
 // ============================================
 async function loadHeadlinePool() {
-  if (isCacheValid('headlines')) {
-    return cache.headlines.data;
-  }
-
-  console.log('[DATA] Fetching headlines...');
-
-  // Fetch all feeds in parallel for speed
-  const [rssResults, gdeltItems] = await Promise.all([
-    Promise.all(
-    RSS_FEEDS.headlines.map(async (feed) => {
-      try {
-        const { data } = await fetchConfiguredFeed(feed, {
-          accept: 'application/rss+xml, application/xml, text/xml',
-        });
-        const parsedItems = parseRSS(data, feed.name);
-        let items = filterRecentItems(parsedItems, {
-          maxAgeMs: feed.maxAgeMs || CONTENT_MAX_AGE.headlines,
-        });
-        if (items.length < parsedItems.length) {
-          console.log(`[DATA] ${feed.name}: dropped ${parsedItems.length - items.length} stale, undated, or invalid items`);
-        }
-        if (feed.filter) {
-          const before = items.length;
-          items = items.filter(feed.filter);
-          if (items.length < before) {
-            console.log(`[DATA] ${feed.name}: filtered ${before - items.length} junk items`);
-          }
-        }
-        console.log(`[DATA] ${feed.name}: ${items.length} items`);
-        return items;
-      } catch (err) {
-        console.error(`[DATA] ${feed.name} failed:`, describeError(err));
-        return [];
-      }
-    })
-    ),
-    // GDELT only supplements the RSS pool and keeps its own cache, so it must never
-    // hold the whole response open. Whatever it has not delivered inside the budget
-    // lands in its cache and joins the next refresh instead.
-    withBudget(fetchGdeltArticles(), GDELT_POOL_BUDGET_MS, []),
-  ]);
-
-  const allItems = [...rssResults.flat(), ...gdeltItems];
-
-  // Sort by date, newest first
-  allItems.sort((a, b) => b.pubDate - a.pubDate);
-
-  // Deduplicate by similar titles
-  const seen = new Set();
-  const unique = allItems.filter(item => {
-    const key = item.title.toLowerCase().substring(0, 50);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  const result = unique.map((item) => ({
-    id: stableId('headline', item.title, item.source),
-    title: item.title,
-    source: item.source,
-    timestamp: item.pubDate.toISOString(),
-    link: item.link,
-    description: item.description,
-  }));
-
-  cache.headlines = { data: result, timestamp: Date.now() };
-  return result;
+  const rss = await loadCategoryPool('headlines', 'headline');
+  const gdelt = await withBudget(fetchGdeltArticles(), GDELT_POOL_BUDGET_MS, []);
+  return [...rss, ...gdelt.map(item => normalizedFeedItem(item, 'headline'))]
+    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
 }
 
 function selectHeadlineItems(items, requestedSources = null) {
   const eligible = requestedSources === null
     ? items
     : items.filter(item => requestedSources.has(item.source));
-  return selectDiverseItems(eligible, 50, 5);
+  return selectDiverseItems(eligible, 80, 5);
 }
 
 async function fetchHeadlines(requestedSources = null) {
+  if (requestedSources?.size === 0) return [];
   const pool = await dedupeRequest('headline-pool', loadHeadlinePool);
   return selectHeadlineItems(pool, requestedSources);
 }
@@ -942,6 +1053,10 @@ async function fetchMarkets() {
     { symbol: '^DJI', name: 'Dow Jones', display: 'DJI' },
     { symbol: '^IXIC', name: 'NASDAQ', display: 'IXIC' },
     { symbol: '^RUT', name: 'Russell 2000', display: 'RUT' },
+    { symbol: '^FTSE', name: 'FTSE 100 · UK', display: 'FTSE' },
+    { symbol: '^GDAXI', name: 'DAX · Germany', display: 'DAX' },
+    { symbol: '^N225', name: 'Nikkei 225 · Japan', display: 'N225' },
+    { symbol: '^HSI', name: 'Hang Seng · Hong Kong', display: 'HSI' },
   ];
 
   const movers = [
@@ -967,7 +1082,7 @@ async function fetchMarkets() {
     ...symbols.map(async ({ symbol, name, display }) => {
       try {
         const data = await fetchYahooQuote(symbol);
-        return data ? { type: 'index', symbol: display, name, ...data } : null;
+        return data ? { type: 'index', symbol: display, quoteSymbol: symbol, name, ...data } : null;
       } catch (err) {
         console.error(`[DATA] ${symbol} failed:`, describeError(err));
         return null;
@@ -990,6 +1105,7 @@ async function fetchMarkets() {
     if (quote.type === 'index') {
       results.indices.push({
         symbol: quote.symbol,
+        quoteSymbol: quote.quoteSymbol || quote.symbol, asOf: quote.asOf, fetchedAt: quote.fetchedAt, currency: quote.currency,
         name: quote.name,
         price: quote.price,
         change: quote.change,
@@ -998,6 +1114,7 @@ async function fetchMarkets() {
     } else {
       results.movers.push({
         symbol: quote.symbol,
+        asOf: quote.asOf, fetchedAt: quote.fetchedAt, currency: quote.currency,
         name: quote.name,
         price: quote.price,
         change: quote.change,
@@ -1031,10 +1148,13 @@ async function fetchYahooQuote(symbol) {
     const meta = result.meta;
     const price = meta.regularMarketPrice;
     const prevClose = meta.chartPreviousClose || meta.previousClose;
+    if (!Number.isFinite(price) || !Number.isFinite(prevClose) || prevClose <= 0) return null;
     const change = price - prevClose;
     const changePercent = (change / prevClose) * 100;
 
     return {
+      asOf: Number.isFinite(meta.regularMarketTime) ? new Date(meta.regularMarketTime * 1000).toISOString() : null,
+      fetchedAt: new Date().toISOString(), currency: meta.currency || null,
       price: Math.round(price * 100) / 100,
       change: Math.round(change * 100) / 100,
       changePercent: Math.round(changePercent * 100) / 100,
@@ -1056,7 +1176,7 @@ async function fetchCrypto() {
   console.log('[DATA] Fetching crypto...');
 
   const coins = ['bitcoin', 'ethereum', 'solana', 'dogecoin', 'cardano', 'ripple'];
-  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coins.join(',')}&vs_currencies=usd&include_24hr_change=true`;
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coins.join(',')}&vs_currencies=usd&include_24hr_change=true&include_last_updated_at=true`;
 
   try {
     const { data } = await fetch(url, {
@@ -1085,10 +1205,13 @@ async function fetchCrypto() {
 function formatCoinGecko(data) {
   if (!data) return { price: null };
   const price = data.usd;
+  if (!Number.isFinite(data.usd) || data.usd <= 0) return { price: null };
   const changePercent = data.usd_24h_change || 0;
   const change = price * (changePercent / 100);
   return {
-    price: Math.round(price * 100) / 100,
+    asOf: Number.isFinite(data.last_updated_at) ? new Date(data.last_updated_at * 1000).toISOString() : null,
+    fetchedAt: new Date().toISOString(), currency: 'USD',
+    price,
     change: Math.round(change * 100) / 100,
     changePercent: Math.round(changePercent * 100) / 100,
   };
@@ -1118,9 +1241,9 @@ async function fetchFredSeries(series) {
     .map(line => {
       const [date, rawValue] = line.split(',');
       const value = Number(rawValue);
-      return { date, value };
+      return { date, value, rawValue };
     })
-    .filter(row => row.date && Number.isFinite(row.value));
+    .filter(row => row.date && row.rawValue?.trim() && row.rawValue !== '.' && Number.isFinite(row.value));
   const latest = rows.at(-1);
   const previous = rows.at(-2);
   if (!latest) return null;
@@ -1141,10 +1264,13 @@ async function fetchMacroData() {
   if (isCacheValid('macro')) return cache.macro.data;
 
   const series = [
-    { id: 'CPIAUCSL', name: 'CPI', unit: 'index' },
+    { id: 'CPIAUCSL', name: 'US CPI (index)', unit: 'index' },
     { id: 'UNRATE', name: 'Unemployment', unit: '%' },
     { id: 'FEDFUNDS', name: 'Fed funds', unit: '%' },
-    { id: 'DGS10', name: '10Y Treasury', unit: '%' },
+    { id: 'DGS10', name: 'US 10Y Treasury', unit: '%' },
+    { id: 'DEXUSEU', name: 'Euro', unit: 'USD/EUR' },
+    { id: 'DEXJPUS', name: 'Japanese yen', unit: 'JPY/USD' },
+    { id: 'CP0000EZ19M086NEST', name: 'Euro area CPI (index)', unit: 'index' },
   ];
   const results = await Promise.all(series.map(async item => {
     try {
@@ -1451,25 +1577,19 @@ function parseJsonArray(value) {
 }
 
 function isSportsMarket(question) {
-  const q = question.toLowerCase();
-  return q.includes('nba') || q.includes('nfl') || q.includes('mlb') ||
-    q.includes('nhl') || q.includes('ncaa') || q.includes('ufc') ||
-    q.includes('tennis') || q.includes('golf') || q.includes('soccer') ||
-    q.includes('football') || q.includes('basketball') || q.includes('baseball') ||
-    q.includes('hockey') || q.includes('f1') || q.includes('formula') ||
-    q.includes('nascar') || q.includes('pga') || q.includes('boxing') ||
-    q.includes('mma') || q.includes('wrestling') || q.includes('olympics') ||
-    q.includes(' vs ') || q.includes(' vs. ') ||
-    q.includes('warriors') || q.includes('lakers') || q.includes('celtics') ||
-    q.includes('cavaliers') || q.includes('magic') || q.includes('timberwolves') ||
-    q.includes('knicks') || q.includes('bulls') || q.includes('heat') ||
-    q.includes('mavs') || q.includes('mavericks') || q.includes('spurs') ||
-    q.includes('nuggets') || q.includes('suns') || q.includes('clippers') ||
-    q.includes('chiefs') || q.includes('eagles') || q.includes('patriots') ||
-    q.includes('cowboys') || q.includes('packers') || q.includes('ravens') ||
-    q.includes('super bowl') || q.includes('world series') ||
-    q.includes('stanley cup') || q.includes('march madness') ||
-    q.includes('playoffs') || q.includes('championship');
+  return /\b(?:nba|nfl|mlb|nhl|ncaa|ufc|tennis|golf|soccer|football|basketball|baseball|hockey|boxing|mma|olympics|formula 1|nascar|pga|lakers|celtics|super bowl|world series|stanley cup|march madness|playoffs)\b|\s+vs\.?\s+/i.test(question);
+}
+
+function hasSportsMetadata(market) {
+  const text = [market.question, market.title, market.slug, market.category,
+    ...(market.tags || []).map(t => typeof t === 'string' ? t : t.label || t.slug),
+    ...(market.events || []).flatMap(e => [e.title, e.slug, e.category, ...(e.tags || []).map(t => t.label || t.slug)]),
+  ].filter(Boolean).join(' ');
+  return /\b(?:sports?|nba|nfl|mlb|nhl|ncaa\w*|ufc|uefa|premier league|la liga|tennis|golf|soccer|football|basketball|baseball|hockey|cricket|boxing|olympics|touchdowns?|goals scored|world cup|super bowl)\b/i.test(text)
+    || /^(?:spread|total|over\/under):/i.test(market.question || market.title || '')
+    || /^Will .+ win on \d{4}-\d{2}-\d{2}\??$/i.test(market.question || '')
+    || /^KX(?:MVE|NFL|NBA|MLB|NHL|NCAA|UEFA|EPL|ATP|WTA|FIFA|PGA|UFC|LALIGA|BUNDES|SOCCER|TENNIS|GOLF|CRICKET)/i.test(market.ticker || '')
+    || Array.isArray(market.mve_selected_legs) && market.mve_selected_legs.length > 0;
 }
 
 function normalizePolymarketMarket(market, now = Date.now()) {
@@ -1481,7 +1601,7 @@ function normalizePolymarketMarket(market, now = Date.now()) {
     market.closed ||
     market.archived ||
     market.active === false ||
-    isSportsMarket(question) ||
+    hasSportsMetadata(market) || isSportsMarket(question) ||
     !Number.isFinite(volume24h) ||
     volume24h < 5000
   ) {
@@ -1511,7 +1631,7 @@ function normalizePolymarketMarket(market, now = Date.now()) {
 
   return {
     id: String(market.id),
-    question: truncateQuestion(question),
+    question,
     yesPrice: Math.round(yesPrice * 100),
     volume24h,
     volumeDisplay: formatVolume(volume24h),
@@ -1521,6 +1641,7 @@ function normalizePolymarketMarket(market, now = Date.now()) {
     endDate: Number.isFinite(marketEnd) ? new Date(marketEnd).toISOString() : null,
     category: categorizeMarket(question),
     source: 'Polymarket',
+    asOf: new Date(now).toISOString(),
   };
 }
 
@@ -1533,7 +1654,7 @@ function normalizeKalshiMarket(market, now = Date.now()) {
     !market?.ticker ||
     !question ||
     market.status !== 'active' ||
-    isSportsMarket(question) ||
+    hasSportsMetadata(market) || isSportsMarket(question) ||
     !Number.isFinite(volume24h) ||
     volume24h < 1000 ||
     !Number.isFinite(yesPrice) ||
@@ -1546,36 +1667,42 @@ function normalizeKalshiMarket(market, now = Date.now()) {
 
   return {
     id: `kalshi-${market.ticker}`,
-    question: truncateQuestion(question),
+    question,
     yesPrice: Math.round(yesPrice * 100),
     volume24h,
-    volumeDisplay: formatVolume(volume24h),
+    volumeDisplay: `${volume24h >= 1000 ? (volume24h / 1000).toFixed(1) + 'K' : Math.round(volume24h)} contracts`,
     slug: market.ticker,
     eventSlug: market.event_ticker || market.ticker,
     url: `https://kalshi.com/markets/${encodeURIComponent(market.event_ticker || market.ticker)}/${encodeURIComponent(market.ticker)}`,
     endDate: Number.isFinite(marketEnd) ? new Date(marketEnd).toISOString() : null,
     category: categorizeMarket(question),
     source: 'Kalshi',
+    volumeUnit: 'contracts',
+    asOf: new Date(now).toISOString(),
   };
 }
 
 async function fetchKalshiDirect() {
-  console.log('[DATA] Fetching predictions from Kalshi...');
+  if (isCacheValid('kalshi')) return cache.kalshi.data;
+  const eligible = [];
+  let cursor = '';
   try {
-    const { data } = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?limit=1000&status=open', {
-      headers: { 'Accept': 'application/json' },
-      timeout: 12000,
-    });
-    const markets = JSON.parse(data).markets || [];
-    const result = markets
-      .map(market => normalizeKalshiMarket(market))
-      .filter(Boolean)
-      .sort((a, b) => b.volume24h - a.volume24h)
-      .slice(0, 25);
+    for (let page = 0; page < 6; page += 1) {
+      const params = new URLSearchParams({ limit: '1000', status: 'open', mve_filter: 'exclude' });
+      if (cursor) params.set('cursor', cursor);
+      const { data } = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?' + params,
+        { accept: 'application/json', timeout: 12000, label: 'Kalshi' });
+      const doc = JSON.parse(data);
+      eligible.push(...(doc.markets || []).map(market => normalizeKalshiMarket(market)).filter(Boolean));
+      if (!doc.cursor || doc.cursor === cursor || eligible.length >= 25) break;
+      cursor = doc.cursor;
+    }
+    const result = eligible.sort((a, b) => b.volume24h - a.volume24h).slice(0, 25);
+    cache.kalshi = { data: result, timestamp: Date.now() };
     return result;
   } catch (err) {
     console.error('[KALSHI]', describeError(err));
-    return [];
+    return eligible.length ? eligible : cache.kalshi.data || [];
   }
 }
 
@@ -1660,40 +1787,7 @@ async function fetchPizzintWatch() {
       console.error('[PIZZINT] JSON parse failed:', parseErr.message);
       return [];
     }
-    const now = Date.now();
-
-    const result = markets
-      .filter(m => {
-        if (m.endDate && new Date(m.endDate).getTime() < now) return false;
-        return m.label || m.question || m.title;
-      })
-      .map(m => {
-        const question = m.label || m.question || m.title || '';
-        const yesPrice = m.price != null
-          ? Math.round(m.price * 100)
-          : m.probability != null
-            ? Math.round(m.probability * 100)
-            : 50;
-
-        const volume24h = Number(m.volume_24h ?? m.volume24hr ?? m.volume) || 0;
-        const eventSlug = m.eventSlug || null;
-
-        return {
-          id: `pizzint-${m.id || m.slug || crypto.createHash('md5').update(question).digest('hex').slice(0, 10)}`,
-          question: truncateQuestion(question),
-          yesPrice,
-          volume24h,
-          volumeDisplay: formatVolume(volume24h),
-          slug: m.slug || null,
-          eventSlug,
-          url: eventSlug
-            ? `https://polymarket.com/event/${encodeURIComponent(eventSlug)}`
-            : 'https://pizzint.watch',
-          endDate: m.endDate ? new Date(m.endDate).toISOString() : null,
-          category: 'geopolitical',
-          source: 'pizzint.watch',
-        };
-      });
+    const result = markets.map(market => normalizePizzintMarket(market)).filter(Boolean);
 
     if (result.length > 0) {
       cache.pizzint = { data: result, timestamp: Date.now() };
@@ -1736,7 +1830,7 @@ async function fetchPredictions() {
     merged.push(item);
   }
 
-  const result = merged.slice(0, 30);
+  const result = selectDiverseItems(merged, 30, 15);
 
   if (result.length > 0) {
     cache.predictions = { data: result, timestamp: Date.now() };
@@ -1744,15 +1838,16 @@ async function fetchPredictions() {
   return result;
 }
 
-function truncateQuestion(q) {
-  if (!q) return '';
-  let clean = q.trim();
-
-  // Truncate if too long
-  if (clean.length > 60) {
-    clean = clean.substring(0, 57) + '...';
-  }
-  return clean;
+function normalizePizzintMarket(market, now = Date.now()) {
+  // A discovery page must identify a real exchange contract; never invent a probability.
+  const probability = market.price ?? market.probability;
+  if (!market.eventSlug || probability == null || !market.endDate) return null;
+  return normalizePolymarketMarket({ id: market.id || market.slug, question: market.label || market.question || market.title,
+    slug: market.slug, active: true, closed: false, endDate: market.endDate,
+    volume24hr: market.volume_24h ?? market.volume24hr,
+    outcomes: ['Yes', 'No'], outcomePrices: [probability, 1 - Number(probability)],
+    events: [{ slug: market.eventSlug, active: true }],
+  }, now);
 }
 
 function formatVolume(vol) {
@@ -1787,137 +1882,34 @@ function categorizeMarket(question) {
 // ============================================
 // Fetch Tech News (RSS)
 // ============================================
-async function fetchTechNews() {
-  if (isCacheValid('tech')) {
-    return cache.tech.data;
-  }
-
-  console.log('[DATA] Fetching tech news...');
-
-  const feedResults = await Promise.all(
-    RSS_FEEDS.tech.map(async (feed) => {
-      try {
-        const { data } = await fetchConfiguredFeed(feed, {
-          accept: 'application/rss+xml, application/xml, text/xml',
-        });
-        const parsedItems = parseRSS(data, feed.name);
-        let items = filterRecentItems(parsedItems, {
-          maxAgeMs: feed.maxAgeMs || CONTENT_MAX_AGE.tech,
-        });
-        if (items.length < parsedItems.length) {
-          console.log(`[DATA] ${feed.name}: dropped ${parsedItems.length - items.length} stale, undated, or invalid items`);
-        }
-        if (feed.filter) {
-          const before = items.length;
-          items = items.filter(feed.filter);
-          if (items.length < before) {
-            console.log(`[DATA] ${feed.name}: filtered ${before - items.length} junk items`);
-          }
-        }
-        console.log(`[DATA] ${feed.name}: ${items.length} items`);
-        return items;
-      } catch (err) {
-        console.error(`[DATA] ${feed.name} failed:`, describeError(err));
-        return [];
-      }
-    })
-  );
-
-  const allItems = feedResults.flat();
-  allItems.sort((a, b) => b.pubDate - a.pubDate);
-
-  // Deduplicate
-  const seen = new Set();
-  const unique = allItems.filter(item => {
-    const key = item.title.toLowerCase().substring(0, 50);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  const result = selectDiverseItems(unique, 50, 6).map((item) => ({
-    id: stableId('tech', item.title, item.source),
-    title: item.title,
-    source: item.source,
-    timestamp: item.pubDate.toISOString(),
-    link: item.link,
-    description: item.description,
-  }));
-
-  cache.tech = { data: result, timestamp: Date.now() };
-  return result;
+function parseRequestedTechSources(value) { return parseRequestedSources(value, RSS_FEEDS.tech); }
+function selectTechItems(items, requestedSources = null) { return selectCategoryItems(items, requestedSources, 60, 5); }
+async function fetchTechNews(requestedSources = null) {
+  if (requestedSources?.size === 0) return [];
+  const pool = await dedupeRequest('tech-pool', () => loadCategoryPool('tech', 'tech'));
+  return selectTechItems(pool, requestedSources);
 }
 
 // ============================================
 // Fetch Science News and Journals (RSS/Atom)
 // ============================================
-async function loadSciencePool() {
-  if (isCacheValid('science')) {
-    return cache.science.data;
-  }
-
-  console.log('[DATA] Fetching science news and journals...');
-
-  const feedResults = await Promise.all(
-    RSS_FEEDS.science.map(async feed => {
-      try {
-        const { data } = await fetchConfiguredFeed(feed, {
-          accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
-        });
-        const parsedItems = parseRSS(data, feed.name);
-        let items = filterRecentItems(parsedItems, {
-          maxAgeMs: feed.maxAgeMs || CONTENT_MAX_AGE.science,
-        });
-        if (items.length < parsedItems.length) {
-          console.log(`[DATA] ${feed.name}: dropped ${parsedItems.length - items.length} stale, undated, or invalid items`);
-        }
-        if (feed.filter) {
-          const before = items.length;
-          items = items.filter(feed.filter);
-          if (items.length < before) {
-            console.log(`[DATA] ${feed.name}: filtered ${before - items.length} housekeeping items`);
-          }
-        }
-        console.log(`[DATA] ${feed.name}: ${items.length} science items`);
-        return items;
-      } catch (err) {
-        console.error(`[DATA] ${feed.name} failed:`, describeError(err));
-        return [];
-      }
-    })
-  );
-
-  const allItems = feedResults.flat().sort((a, b) => b.pubDate - a.pubDate);
-  const seen = new Set();
-  const unique = allItems.filter(item => {
-    const key = item.title.toLowerCase().replace(/\s+/g, ' ').trim();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  const result = unique.map(item => ({
-    id: stableId('science', item.title, item.source),
-    title: item.title,
-    source: item.source,
-    timestamp: item.pubDate.toISOString(),
-    link: item.link,
-    description: item.description,
-  }));
-
-  cache.science = { data: result, timestamp: Date.now() };
-  return result;
-}
+async function loadSciencePool() { return loadCategoryPool('science', 'science'); }
 
 function selectScienceItems(items, requestedSources = null) {
   const eligible = requestedSources === null
     ? items
     : items.filter(item => requestedSources.has(item.source));
-  const perSourceCap = Math.max(1, Math.floor(60 / RSS_FEEDS.science.length));
-  return selectDiverseItems(eligible, 60, perSourceCap);
+  // Reserve at least one slot per configured source as the researcher list grows.
+  const limit = Math.max(60, RSS_FEEDS.science.length);
+  const perSourceCap = Math.max(1, Math.floor(limit / RSS_FEEDS.science.length));
+  return selectDiverseItems(eligible, limit, perSourceCap);
 }
 
 async function fetchScienceNews(requestedSources = null) {
-  const pool = await dedupeRequest('science-pool', loadSciencePool);
+  if (requestedSources?.size === 0) return [];
+  if (isCacheValid('science')) return selectScienceItems(cache.science.data, requestedSources);
+  const completed = await withBudget(dedupeRequest('science-pool', loadSciencePool), 10000, null);
+  const pool = completed || cache.science.data || [];
   return selectScienceItems(pool, requestedSources);
 }
 
@@ -1934,54 +1926,38 @@ function parseRequestedScienceSources(value) {
 }
 
 // ============================================
+// Fetch Finance News and Primary Economic Releases
+// ============================================
+function normalizeFinanceItems(items) {
+  return normalizeCategoryItems(items.filter(item => !isPromotionalEntry(item) && isFinanceEntry(item)), 'headline');
+}
+async function loadFinancePool() { return loadCategoryPool('finance', 'headline'); }
+
+function selectFinanceItems(items, requestedSources = null) {
+  const eligible = requestedSources === null
+    ? items
+    : items.filter(item => requestedSources.has(item.source));
+  return selectDiverseItems(eligible, 80, 5);
+}
+
+async function fetchFinanceNews(requestedSources = null) {
+  if (requestedSources?.size === 0) return [];
+  const pool = await dedupeRequest('finance-pool', loadFinancePool);
+  return selectFinanceItems(pool, requestedSources);
+}
+
+function parseRequestedFinanceSources(value) {
+  if (value === undefined) return null;
+  const allowedSources = new Set(RSS_FEEDS.finance.map(feed => feed.name));
+  const raw = Array.isArray(value) ? value.join(',') : String(value);
+  return new Set(raw.split(',').map(source => source.trim())
+    .filter(source => allowedSources.has(source)));
+}
+
+// ============================================
 // Fetch Local News (DC and Alexandria)
 // ============================================
-async function loadLocalPool() {
-  if (isCacheValid('local')) return cache.local.data;
-
-  console.log('[DATA] Fetching DC and Alexandria local news...');
-  const feedResults = await Promise.all(
-    RSS_FEEDS.local.map(async feed => {
-      try {
-        const { data } = await fetchConfiguredFeed(feed, {
-          accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
-        });
-        const parsedItems = feed.parser === 'alexandria-html'
-          ? parseAlexandriaNews(data, feed.name, feed.url)
-          : parseRSS(data, feed.name);
-        let items = filterRecentItems(parsedItems, {
-          maxAgeMs: feed.maxAgeMs || CONTENT_MAX_AGE.headlines,
-        });
-        if (feed.filter) items = items.filter(feed.filter);
-        console.log(`[DATA] Local ${feed.name}: ${items.length} items`);
-        return items;
-      } catch (err) {
-        console.error(`[DATA] Local ${feed.name} failed:`, describeError(err));
-        return [];
-      }
-    })
-  );
-
-  const allItems = feedResults.flat().sort((a, b) => b.pubDate - a.pubDate);
-  const seen = new Set();
-  const unique = allItems.filter(item => {
-    const key = item.title.toLowerCase().replace(/\s+/g, ' ').trim();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  const result = unique.map(item => ({
-    id: stableId('local', item.title, item.source),
-    title: item.title,
-    source: item.source,
-    timestamp: item.pubDate.toISOString(),
-    link: item.link,
-    description: item.description,
-  }));
-
-  cache.local = { data: result, timestamp: Date.now() };
-  return result;
-}
+async function loadLocalPool() { return loadCategoryPool('local', 'local'); }
 
 function selectLocalItems(items, requestedSources = null) {
   const eligible = requestedSources === null
@@ -1991,6 +1967,7 @@ function selectLocalItems(items, requestedSources = null) {
 }
 
 async function fetchLocalNews(requestedSources = null) {
+  if (requestedSources?.size === 0) return [];
   const pool = await dedupeRequest('local-pool', loadLocalPool);
   return selectLocalItems(pool, requestedSources);
 }
@@ -2084,8 +2061,7 @@ async function fetchLemmy() {
       try {
         const url = `https://lemmy.world/api/v3/post/list?community_name=${encodeURIComponent(community)}&sort=Hot&limit=25`;
         const { data } = await fetch(url, {
-          accept: 'application/json',
-          timeout: 10000,
+          accept: 'application/json', timeout: 10000, label: `c/${community}`,
         });
         const document = JSON.parse(data);
         const now = Date.now();
@@ -2138,12 +2114,12 @@ async function fetchLemmy() {
   const allPosts = communityResults.flat().sort((a, b) => b.rank - a.rank);
   const seen = new Set();
   const unique = allPosts.filter(post => {
-    const key = `${post.url || ''}|${post.title.toLowerCase()}`;
+    const key = `${post.source}|${post.url || ''}|${post.title.toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-  const result = selectDiverseItems(unique, 45, 15).map(({ rank, ...post }) => post);
+  const result = unique.map(({ rank, ...post }) => socialProvenance(post));
 
   if (result.length > 0) {
     cache.lemmy = { data: result, timestamp: Date.now() };
@@ -2267,7 +2243,7 @@ async function fetchOpenSocial() {
         });
         const { data } = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.feed.getFeed?${query}`, {
           accept: 'application/json',
-          headers: { 'Accept-Language': 'en' },
+          headers: { 'Accept-Language': 'en' }, label: 'Bluesky Discover',
           timeout: 10000,
         });
         const document = JSON.parse(data);
@@ -2284,7 +2260,7 @@ async function fetchOpenSocial() {
     (async () => {
       try {
         const { data } = await fetch('https://mastodon.social/api/v1/trends/links?limit=20', {
-          accept: 'application/json',
+          accept: 'application/json', label: 'Mastodon Trending',
           timeout: 10000,
         });
         const links = JSON.parse(data)
@@ -2299,11 +2275,8 @@ async function fetchOpenSocial() {
     })(),
   ]);
 
-  const result = selectDiverseItems(
-    [...blueskyPosts, ...mastodonLinks].sort((a, b) => b.rank - a.rank),
-    30,
-    15
-  ).map(({ rank, ...item }) => item);
+  const result = [...blueskyPosts, ...mastodonLinks].sort((a, b) => b.rank - a.rank)
+    .map(({ rank, ...item }) => socialProvenance(item, item.source === 'Mastodon Trending' ? 'trending' : 'posted'));
 
   if (result.length > 0) {
     cache.openSocial = { data: result, timestamp: Date.now() };
@@ -2324,7 +2297,7 @@ async function fetchHackerNews() {
 
   try {
     // Get top story IDs
-    const { data: idsData } = await fetch(`${HN_API}/topstories.json`, {
+    const { data: idsData } = await fetch(`${HN_API}/topstories.json`, { label: 'Hacker News',
       headers: { 'Accept': 'application/json' },
     });
     const storyIds = JSON.parse(idsData).slice(0, 30);
@@ -2359,7 +2332,7 @@ async function fetchHackerNews() {
       timestamp: new Date(story.time * 1000).toISOString(),
       by: story.by,
       type: story.type,
-    }));
+    })).map(story => socialProvenance(story));
 
     cache.hackernews = { data: result, timestamp: Date.now() };
     return result;
@@ -2389,7 +2362,7 @@ async function fetchFourChan() {
       await new Promise(resolve => setTimeout(resolve, 1100));
     }
     try {
-      const { data } = await fetch(`https://a.4cdn.org/${board}/catalog.json`, {
+      const { data } = await fetch(`https://a.4cdn.org/${board}/catalog.json`, { label: `/${board}/`,
         headers: { 'Accept': 'application/json' },
         timeout: 8000,
       });
@@ -2427,7 +2400,10 @@ async function fetchFourChan() {
 
   // Sort by reply count, while preventing a single board from consuming the list.
   allThreads.sort((a, b) => b.replies - a.replies);
-  const result = selectDiverseItems(allThreads, 40, 14);
+  const result = allThreads.filter(item => {
+    const t = Date.parse(item.timestamp);
+    return Number.isFinite(t) && t <= Date.now() + 900000 && t >= Date.now() - 7 * 86400000;
+  }).map(item => ({ ...item, timestampKind: 'posted', sourceKind: 'discussion', contentType: 'discussion' }));
 
   if (result.length > 0) {
     cache.fourchan = { data: result, timestamp: Date.now() };
@@ -2439,6 +2415,18 @@ async function fetchFourChan() {
 // Express Route Handlers
 // ============================================
 function registerRoutes(app) {
+  app.get('/api/source-health', (_req, res) => res.json(getSourceHealth()));
+  app.get('/api/finance', async (req, res) => {
+    try {
+      const requestedSources = parseRequestedFinanceSources(req.query.sources);
+      const data = await fetchFinanceNews(requestedSources);
+      res.json(data);
+    } catch (err) {
+      console.error('[API] Finance error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/api/headlines', async (req, res) => {
     try {
       const requestedSources = parseRequestedHeadlineSources(req.query.sources);
@@ -2557,7 +2545,10 @@ function registerRoutes(app) {
 
   app.get('/api/lemmy', async (req, res) => {
     try {
-      const data = await dedupeRequest('lemmy', fetchLemmy);
+      const requested = parseRequestedSources(req.query.sources, (LEMMY_COMMUNITIES.map(name => 'c/' + name)).map(name => ({ name })));
+      if (requested?.size === 0) return res.json([]);
+      const pool = await dedupeRequest('lemmy', fetchLemmy);
+      const data = selectCategoryItems(pool, requested, 45, 15);
       res.json(data);
     } catch (err) {
       console.error('[API] Lemmy error:', err);
@@ -2567,7 +2558,10 @@ function registerRoutes(app) {
 
   app.get('/api/open-social', async (req, res) => {
     try {
-      const data = await dedupeRequest('openSocial', fetchOpenSocial);
+      const requested = parseRequestedSources(req.query.sources, (['Bluesky Discover', 'Mastodon Trending']).map(name => ({ name })));
+      if (requested?.size === 0) return res.json([]);
+      const pool = await dedupeRequest('openSocial', fetchOpenSocial);
+      const data = selectCategoryItems(pool, requested, 30, 15);
       res.json(data);
     } catch (err) {
       console.error('[API] Open social error:', err);
@@ -2577,7 +2571,10 @@ function registerRoutes(app) {
 
   app.get('/api/hackernews', async (req, res) => {
     try {
-      const data = await dedupeRequest('hackernews', fetchHackerNews);
+      const requested = parseRequestedSources(req.query.sources, (['Hacker News']).map(name => ({ name })));
+      if (requested?.size === 0) return res.json([]);
+      const pool = await dedupeRequest('hackernews', fetchHackerNews);
+      const data = selectCategoryItems(pool, requested, 30, 30);
       res.json(data);
     } catch (err) {
       console.error('[API] Hacker News error:', err);
@@ -2587,7 +2584,10 @@ function registerRoutes(app) {
 
   app.get('/api/4chan', async (req, res) => {
     try {
-      const data = await dedupeRequest('fourchan', fetchFourChan);
+      const requested = parseRequestedSources(req.query.sources, (['/news/', '/pol/', '/lit/', '/his/', '/g/']).map(name => ({ name })));
+      if (requested?.size === 0) return res.json([]);
+      const pool = await dedupeRequest('fourchan', fetchFourChan);
+      const data = selectCategoryItems(pool, requested, 40, 14);
       res.json(data);
     } catch (err) {
       console.error('[API] 4chan error:', err);
@@ -2597,7 +2597,7 @@ function registerRoutes(app) {
 
   app.get('/api/tech', async (req, res) => {
     try {
-      const data = await dedupeRequest('tech', fetchTechNews);
+      const data = await fetchTechNews(parseRequestedTechSources(req.query.sources));
       res.json(data);
     } catch (err) {
       console.error('[API] Tech news error:', err);
@@ -2616,7 +2616,7 @@ function registerRoutes(app) {
     }
   });
 
-  console.log('[DATA] API routes registered: /api/headlines, /api/local, /api/custom, /api/ticker, /api/markets, /api/crypto, /api/macro, /api/weather, /api/radar, /api/predictions, /api/lemmy, /api/open-social, /api/hackernews, /api/4chan, /api/tech, /api/science');
+  console.log('[DATA] API routes registered: /api/headlines, /api/finance, /api/local, /api/custom, /api/ticker, /api/markets, /api/crypto, /api/macro, /api/weather, /api/radar, /api/predictions, /api/lemmy, /api/open-social, /api/hackernews, /api/4chan, /api/tech, /api/science, /api/source-health');
 }
 
 module.exports = {
@@ -2635,15 +2635,26 @@ module.exports = {
   },
   normalizePolymarketMarket,
   normalizeKalshiMarket,
+  normalizePizzintMarket,
+  hasSportsMetadata,
   selectDiverseItems,
   selectHeadlineItems,
   selectScienceItems,
+  selectTechItems,
+  parseRequestedTechSources,
+  normalizeCategoryItems,
+  fetchConfiguredFeed,
+  getSourceHealth,
   selectLocalItems,
+  selectFinanceItems,
+  parseRequestedFinanceSources,
+  normalizeFinanceItems,
   normalizeBlueskyPost,
   normalizeMastodonLink,
   registerRoutes,
   fetchHeadlines,
   fetchLocalNews,
+  fetchFinanceNews,
   fetchCustomFeeds,
   fetchTicker,
   fetchMarkets,

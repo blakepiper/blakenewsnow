@@ -24,16 +24,20 @@ The application is self-hosted and credential-free by default. Its **What's Happ
 
 ## Features
 
-- **Current-first aggregation** — RSS, Atom, RDF, and public APIs are normalized behind a seven-day freshness policy.
+- **Current-first aggregation** — news uses a seven-day freshness window; slower research, investigations, and civic sources use explicit shared windows. Author publication monitors use 180 days. Older entries retain their real dates.
 - **Six-story briefing** — related coverage is clustered into six skimmable storylines when enough current reporting is available.
 - **Syndication-aware ranking** — syndicated copies are grouped so repeated wire coverage does not inflate independent-source counts.
 - **Text-only article reader** — Mozilla Readability extracts article text without rendering publisher scripts, advertisements, cookie prompts, popups, or embeds.
 - **Verified full-text alternatives** — when a publisher exposes only an excerpt, local topic similarity finds related reporting and offers a link only after the reader verifies that the alternative has full text. The reader switches sources only when clicked and preserves both links.
 - **Source controls** — individual publishers and communities can be enabled or disabled from settings, with select-all and unselect-all actions.
 - **Dedicated science feed** — a separate Science tab combines current science journalism with articles from leading multidisciplinary and medical journals.
+- **Dedicated finance feed** — a Finance tab tracks stocks, IPOs, crypto, trade wars, tariffs, and global macroeconomics in one combined feed. BEA, USTR, Federal Register trade documents, SEC registration filings, Bank of Japan, CFTC, and Ethereum Foundation updates complement financial reporting. Relevant general and technology reporting joins the finance feed; source choices persist in Settings.
 - **Dedicated local feed** — a separate Local tab covers Washington, DC and Alexandria through local publishers, public radio, city news, and Virginia reporting.
 - **Local promotion filtering** — WTOP betting, sportsbook, casino, and prediction-market promotions are removed before local stories are displayed.
-- **Open social signals** — integrates Lemmy, Bluesky Discover, Mastodon trending links, Hacker News, and selected 4chan boards without application credentials.
+- **Open social signals** — integrates Lemmy, Bluesky Discover, Mastodon trending links, Hacker News, and selected 4chan boards without application credentials. Bluesky Discover and anonymous boards are optional and disabled by default. Social activity dates are labeled separately from article dates, and social discovery does not count as independent briefing reporting.
+- **Source provenance and health** — Settings shows delivery failures, recent eligible counts, and source types. Researcher monitors have their own group. Shared articles and coauthored papers appear once with their source/author associations; original reports remain available for source selection and briefing clustering.
+- **Expanded coverage** — Daily Maverick and Global Voices add regional perspectives, KFF Health News adds health policy, and WMATA alerts and Alexandria council agendas add actionable local information.
+- **Market context** — international indices, euro/yen exchange rates, and euro-area consumer prices complement US indicators. Quotes and macro observations show their dates and units; stock movement is labeled as a fixed watchlist. Prediction entries preserve full questions and end dates, exclude sports/combination contracts, and require a liquid, identified exchange contract.
 - **User RSS/Atom feeds** — add any public feed from Settings; the server rejects private hosts, credentials, and non-HTTP(S) URLs.
 - **Live context panels** — weather radar, financial markets, cryptocurrency, prediction markets, ticker data, and an interactive geographic globe.
 - **Dense interaction model** — keyboard navigation, search, responsive layouts, and persistent draggable pane sizes.
@@ -63,6 +67,8 @@ it opens `http://localhost:3000` in the default browser; set
 Open [http://localhost:3000](http://localhost:3000). The Vite frontend runs on port `3000` and the Express API runs on port `3001`.
 
 No API keys or paid services are required for the currently configured integrations. Public endpoints may still impose their own rate limits or availability rules.
+
+In the October 2026 validation, IMF news feeds rejected requests and its legacy RSS pages returned no entries, so IMF was removed from configured sources. Empty researcher searches are labeled as missing recent indexed publications, not inactive researchers. `npm run audit:sources -- --json=/tmp/source-audit.json` records delivery and eligible-content coverage with the application's actual parsers and freshness rules.
 
 ### Run with Guix
 
@@ -134,13 +140,15 @@ The reader is deliberately separate from the publisher page. It only returns ext
 
 | Category | Sources |
 |---|---|
-| General news | NPR, BBC, CBC News, DW, The Guardian, Al Jazeera, ABC News, CBS News, The New York Times, Bloomberg, Financial Times, The Wall Street Journal, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart, GDELT, RFI, The Hindu, Indian Express, SCMP, El Pais, Euronews, The New Humanitarian, African Arguments, The Conversation |
-| Official and verification | White House, Defense.gov, Congress.gov, CISA, NOAA, SEC, Federal Reserve, BLS, EIA, FDA Press Releases, FDA Recalls, CDC Travel Notices, FactCheck.org, Snopes, ICIJ, Bellingcat |
+| General news | NPR, BBC, CBC News, DW, The Guardian, Al Jazeera, ABC News, CBS News, The New York Times, PBS NewsHour, NBC News, Axios, The Hill, Vox, Fox News, Politico, Semafor, The Intercept, ProPublica, Foreign Policy, Breitbart, GDELT, RFI, The Hindu, Indian Express, SCMP, El Pais, Euronews, The New Humanitarian, Daily Maverick, Global Voices, African Arguments, The Conversation |
+| Official and verification | White House, Defense.gov, Congress.gov, CISA, NOAA, FDA Press Releases, FDA Recalls, CDC Travel Notices, FactCheck.org, Snopes, ICIJ, Bellingcat |
 | Technology | Hacker News, Ars Technica, The Verge, TechCrunch, Wired, Lobsters, MIT Technology Review, BleepingComputer, Rest of World, The Register, 404 Media, KrebsOnSecurity, Dark Reading, IEEE Spectrum, The Markup, GitHub Engineering, GitHub Security, OpenAI News, Google AI, AWS News, Cloudflare |
-| Science news | ScienceDaily, Phys.org, Science News, Live Science, Quanta Magazine, NASA, AAAS Science News, APS Psychology, Neuroscience News Psychology, Carbon Brief, Mongabay, STAT, WHO, Undark |
+| Science news | ScienceDaily, Phys.org, Science News, Live Science, Quanta Magazine, NASA, AAAS Science News, APS Psychology, Neuroscience News Psychology, Carbon Brief, Mongabay, STAT, KFF Health News, WHO, Undark |
 | Scientific journals | Nature, Science, PNAS, Cell, Science Advances, eLife, PLOS ONE, The Lancet, NEJM, Frontiers in Psychology, Human Factors, Ergonomics |
-| Local — DC and Alexandria | WTOP, WAMU, Alexandria City, Alexandria Times, ALXnow, Virginia Mercury, Washington Post Local, DC News Now, Washington City Paper, Washington Blade |
+| Local — DC and Alexandria | WTOP, WAMU, Alexandria City, Alexandria Council, WMATA Alerts, Alexandria Times, ALXnow, Virginia Mercury, Washington Post Local, DC News Now, Washington City Paper, Washington Blade |
 | Social | Lemmy communities, Bluesky Discover, Mastodon trending links, 4chan `/news/`, `/pol/`, `/lit/`, and `/his/` |
+| Finance reporting | Bloomberg, Financial Times, The Wall Street Journal (Markets), CNBC Economy, CNBC IPOs, CoinDesk, BBC Business, Guardian Business, SEC, Federal Reserve, BLS, EIA, ECB, WTO News |
+| Additional primary finance sources | BEA, USTR, Federal Register Trade, SEC IPO Filings, SEC Foreign IPO Filings, Bank of Japan, CFTC, Ethereum Foundation |
 | Markets and macro | Yahoo Finance, CoinGecko, FRED |
 | Predictions | Polymarket, Kalshi, pizzint.watch |
 | Weather | National Weather Service, RainViewer |
@@ -157,7 +165,7 @@ All configured news sources use public RSS, Atom, HTML, or anonymous public endp
 | `/` | Open search |
 | `?` | Show keyboard shortcuts |
 | `Ctrl+,` | Open settings |
-| `1`–`6` | Change the active feed filter |
+| `1`–`7` | Change the active feed filter |
 | `Esc` | Close the active dialog |
 
 ## Architecture

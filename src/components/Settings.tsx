@@ -17,7 +17,9 @@ import {
 import { styled } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import type { Settings as SettingsType, SourceConfig } from '../stores/settings';
-import { UI_TIMING } from '../config';
+import { API_BASE, UI_TIMING } from '../config';
+import { sourceKind } from '../../shared/source-policy.js';
+import { formatTimeAgo } from '../utils/formatters';
 
 interface SettingsProps {
   settings: SettingsType;
@@ -199,12 +201,22 @@ const ShortcutKey = styled('kbd')(({ theme }) => ({
   textAlign: 'center',
 }));
 
-function SourceToggle({ source, onToggle }: { source: SourceConfig; onToggle: () => void }) {
+interface SourceHealth { name: string; state: string; itemCount: number | null; newestDate: string | null; lastAttempt: string | null; lastSuccess: string | null; retryAt: string | null; error?: string }
+
+function SourceToggle({ source, health, onToggle }: { source: SourceConfig; health?: SourceHealth; onToggle: () => void }) {
+  const kind = sourceKind(source.name);
+  const labels: Record<string, string> = { author: 'Publication monitor', official: 'Official source', vendor: 'Company announcements', journal: 'Journal · mixed content', summary: 'Research summaries', discovery: 'Link discovery', discussion: 'Anonymous discussion' };
+  const status = health?.state === 'unavailable' ? `Unavailable${health.error ? ` · ${health.error}` : ''}`
+    : health?.state === 'no-recent-publications' ? 'No recent indexed publications'
+      : health?.state === 'no-recent-items' ? 'No recent entries'
+        : health?.itemCount != null ? `${health.itemCount} recent entries` : '';
   return (
     <SourceRow>
-      <SourceName variant="body2" enabled={source.enabled}>
-        {source.name}
-      </SourceName>
+      <div className="min-w-0" title={health ? `Last request: ${health.lastAttempt || 'not checked'}\nLast successful request: ${health.lastSuccess || 'none'}${health.retryAt ? `\nRetry after: ${health.retryAt}` : ''}${health.newestDate ? `\nNewest entry: ${health.newestDate}` : ''}` : undefined}>
+        <SourceName variant="body2" enabled={source.enabled}>{source.name}</SourceName>
+        {(labels[kind] || ['Fox News', 'Breitbart', 'Global Voices'].includes(source.name)) && <Typography variant="caption" color="text.secondary" component="div">{labels[kind] || 'Editorial perspective'}</Typography>}
+        {status && <Typography variant="caption" component="div" color={health?.state === 'unavailable' ? 'warning.main' : 'text.secondary'}>{status}{health?.lastAttempt && ` · ${formatTimeAgo(health.lastAttempt)}`}</Typography>}
+      </div>
       <SourceSwitch
         checked={source.enabled}
         onChange={onToggle}
@@ -231,6 +243,7 @@ export function Settings({
   const [customUrl, setCustomUrl] = useState('');
   const [customError, setCustomError] = useState('');
   const [locationSaved, setLocationSaved] = useState(false);
+  const [health, setHealth] = useState<SourceHealth[]>([]);
   const saveTimerRef = useRef<number | null>(null);
   const zipIsValid = /^\d{5}$/.test(zipInput);
   const configuredSources = [...settings.sources, ...settings.customFeeds];
@@ -240,6 +253,17 @@ export function Settings({
 
   useEffect(() => () => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const readHealth = () => fetch(`${API_BASE}/api/source-health`, { signal: controller.signal })
+      .then(response => response.ok ? response.json() : [])
+      .then(data => { if (!controller.signal.aborted && Array.isArray(data)) setHealth(data); })
+      .catch(() => {});
+    readHealth();
+    const interval = setInterval(readHealth, 15000);
+    return () => { controller.abort(); clearInterval(interval); };
   }, []);
 
   const handleSaveLocation = () => {
@@ -254,8 +278,10 @@ export function Settings({
   };
 
   const sourcesByCategory = configuredSources.reduce((groups, source) => {
-    if (!groups[source.category]) groups[source.category] = [];
-    groups[source.category].push(source);
+    const category = sourceKind(source.name) === 'author' ? 'authors'
+      : ['discussion'].includes(sourceKind(source.name)) || source.name === 'Bluesky Discover' ? 'optional' : source.category;
+    if (!groups[category]) groups[category] = [];
+    groups[category].push(source);
     return groups;
   }, {} as Record<string, SourceConfig[]>);
 
@@ -267,6 +293,8 @@ export function Settings({
     finance: 'Finance',
     local: 'Local',
     custom: 'Custom feeds',
+    authors: 'Researcher publication monitors',
+    optional: 'Optional social discovery and discussion',
   };
 
   const handleAddCustomFeed = () => {
@@ -359,6 +387,7 @@ export function Settings({
                     <SourceToggle
                       key={source.id}
                       source={source}
+                      health={health.find(entry => entry.name === source.name)}
                       onToggle={() => onToggleSource(source.id)}
                     />
                   ))}

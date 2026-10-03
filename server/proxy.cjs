@@ -94,6 +94,7 @@ app.listen(PORT, () => {
   console.log(`[SERVER] Blake News Now API running on http://localhost:${PORT}`);
   console.log('[SERVER] Available endpoints:');
   console.log('  - /api/headlines');
+  console.log('  - /api/finance');
   console.log('  - /api/local');
   console.log('  - /api/custom');
   console.log('  - /api/tech');

@@ -10,7 +10,8 @@ interface Prediction {
   category: string;
   slug?: string;
   url: string;
-  source: 'Polymarket' | 'pizzint.watch';
+  source: 'Polymarket' | 'Kalshi';
+  asOf?: string;
   endDate?: string | null;
 }
 
@@ -94,7 +95,7 @@ export function Predictions() {
                     href={pred.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title={`Open on ${pred.source}`}
+                    title={`${pred.question}\n${pred.source} · ${pred.volumeDisplay} traded in 24h${pred.endDate ? `\nEnds: ${new Date(pred.endDate).toLocaleString()}` : ''}${pred.asOf ? `\nAs of: ${new Date(pred.asOf).toLocaleString()}` : ''}`}
                     className="block py-1.5 md:py-1 hover:bg-white/5 active:bg-white/10 rounded px-1 -mx-1 transition-colors"
                   >
                     <div className="flex items-center gap-2 text-[11px] md:text-[10px] leading-tight">
@@ -116,9 +117,10 @@ export function Predictions() {
                         />
                       </div>
                       <span className="text-white/30 text-[9px] tabular-nums shrink-0">
-                        {pred.source === 'Polymarket' ? 'PM' : 'PI'} · {pred.volumeDisplay}
+                        {pred.source === 'Polymarket' ? 'PM' : 'Kalshi'} · {pred.volumeDisplay} · 24h
                       </span>
                     </div>
+                    {pred.endDate && <div className="text-white/40 text-[9px] mt-0.5">Ends {new Date(pred.endDate).toLocaleDateString()}{pred.asOf && ` · Updated ${new Date(pred.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</div>}
                   </a>
                 ))}
               </div>

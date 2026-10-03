@@ -49,9 +49,17 @@ server/
 ## Feed invariants
 
 - Do not assign the current time to undated content.
-- Reject malformed links, future timestamps, and items older than seven days.
+- Reject malformed links and future timestamps. Use the shared per-source policy in
+  `shared/source-policy.js`: news defaults to seven days, slower research/investigations
+  and civic sources have explicit windows, and scientist publications use 180 days.
 - Apply requested source filters before response limits.
 - Preserve corroborating reports for the briefing while deduplicating the visible feed.
+- Group canonical article links and coauthored publications with all source/author
+  associations. Social activity/indexing dates must not masquerade as article publication dates.
+- Keep optional anonymous boards and Bluesky Discover disabled by default. Preserve
+  later explicit user selections after the one-time source-policy migration.
+- Use `server/source-adapters.cjs` for both live ingestion and source auditing; expose
+  delivery failures through `/api/source-health` and Settings.
 - Count known syndicated copies as one independent report.
 - Keep upstream failures isolated so one source cannot empty an otherwise healthy response.
 - Maintain SSRF protections on article preview and radar proxy routes.

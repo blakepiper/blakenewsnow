@@ -320,7 +320,7 @@ async function runTests() {
   const selectedPublishers = ['Bloomberg', 'Financial Times', 'Wall Street Journal'];
   await testEndpoint(
     'Selected financial publishers',
-    `/api/headlines?sources=${encodeURIComponent(selectedPublishers.join(','))}`,
+    `/api/finance?sources=${encodeURIComponent(selectedPublishers.join(','))}`,
     [
       validateArray(3),
       validateFields(['id', 'title', 'source', 'timestamp']),

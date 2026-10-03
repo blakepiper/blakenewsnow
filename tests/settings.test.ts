@@ -7,12 +7,12 @@ test('saved-article state is no longer part of settings', () => {
   assert.equal('readingList' in DEFAULT_SETTINGS, false);
 });
 
-test('includes the requested financial publishers as enabled news sources', () => {
+test('includes the requested financial publishers as enabled finance sources', () => {
   const sources = new Map(DEFAULT_SETTINGS.sources.map(source => [source.id, source]));
 
   for (const id of ['bloomberg', 'financial-times', 'wall-street-journal']) {
     assert.equal(sources.get(id)?.enabled, true);
-    assert.equal(sources.get(id)?.category, 'news');
+    assert.equal(sources.get(id)?.category, 'finance');
   }
 });
 
@@ -22,18 +22,16 @@ test('includes credential-free federated and open social sources', () => {
   for (const id of [
     'lemmy-politics',
     'lemmy-science',
-    'bluesky-discover',
     'mastodon-trending',
-    '4chan-his',
   ]) {
     assert.equal(sources.get(id)?.enabled, true);
     assert.equal(sources.get(id)?.category, 'social');
   }
 });
 
-test('includes 4chan /g/ as an enabled technology source with its API alias', () => {
+test('includes 4chan /g/ as an optional technology source with its API alias', () => {
   const source = DEFAULT_SETTINGS.sources.find(source => source.id === '4chan-g');
-  assert.equal(source?.enabled, true);
+  assert.equal(source?.enabled, false);
   assert.equal(source?.category, 'tech');
   assert.deepEqual(source?.apiSources, ['/g/']);
   assert.equal(getSourceCategory('/g/'), 'tech');
@@ -105,8 +103,8 @@ test('selects and unselects every source in one immutable update', () => {
 
   assert.ok(unselected.sources.every(source => !source.enabled));
   assert.ok(selected.sources.every(source => source.enabled));
-  assert.ok(DEFAULT_SETTINGS.sources.every(source => source.enabled));
-  assert.equal(setAllSources(DEFAULT_SETTINGS, true), DEFAULT_SETTINGS);
+  assert.ok(DEFAULT_SETTINGS.sources.some(source => !source.enabled));
+  assert.equal(setAllSources(selected, true), selected);
 });
 
 test('pane dimensions persist within usable bounds', () => {
@@ -118,4 +116,13 @@ test('pane dimensions persist within usable bounds', () => {
   assert.equal(short.paneSizes.weatherHeight, 100);
   assert.equal(tall.paneSizes.marketsHeight, 520);
   assert.equal(DEFAULT_SETTINGS.paneSizes.sidebarWidth, 380);
+});
+
+test('enables all monitored scientists in Science', () => {
+  for (const name of ['Karl Friston', 'Michael Levin', 'Chris Fields', 'Geoffrey Hinton', 'Yann LeCun', 'Percy Liang', 'Stuart Russell', 'Yoshua Bengio', 'Fei-Fei Li', 'Yejin Choi', 'Dawn Song', 'Chris Olah', 'Neel Nanda', 'Paul Christiano', 'Dan Hendrycks', 'Myles Allen', 'Piers Forster', 'Gavin Schmidt', 'Friederike Otto', 'Richard Alley', 'Corinne Le Quéré', 'Marshall Burke', 'Jesse Jenkins', 'Michael Mann', 'Zeke Hausfather', 'Matt Kaeberlein', 'Valter Longo', 'David Sinclair', 'Steve Horvath', 'Michael Snyder', 'Herman Pontzer', 'Vishwa Deep Dixit', 'Rhonda Patrick', 'Peter Attia', 'Chris Masterjohn', 'Lisa Kaltenegger', 'Nikku Madhusudhan', 'Sara Seager', 'David Kipping', 'Victoria Meadows', 'Ravi Kopparapu', 'Jessie Christiansen', 'Kevin Hand', 'Sara Imari Walker', 'Jason Wright', 'Jennifer Doudna', 'Feng Zhang', 'David Liu', 'George Church', 'Jay Keasling', 'James Collins', 'Pamela Silver', 'Drew Endy', 'Timothy Lu', 'Cameron Myhrvold']) {
+    const source = DEFAULT_SETTINGS.sources.find(source => source.name === name);
+    assert.equal(source?.enabled, true);
+    assert.equal(source?.category, 'science');
+    assert.equal(getSourceCategory(name), 'science');
+  }
 });

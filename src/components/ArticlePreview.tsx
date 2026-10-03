@@ -490,6 +490,20 @@ export function ArticlePreview({ item, alternatives, onClose }: ArticlePreviewPr
           </ReaderTopbar>
 
           <ReaderContent ref={readerContentRef}>
+            {item.monitoredAuthors && item.monitoredAuthors.length > 0 && (
+              <div className="mb-3 text-xs text-white/60">Followed authors: {item.monitoredAuthors.join(', ')}</div>
+            )}
+            {item.relatedReports && item.relatedReports.length > 1 && (
+              <div className="mb-3 flex flex-wrap gap-2 text-xs text-white/60">
+                <span>Also available through:</span>
+                {item.relatedReports.filter(report => report.source !== item.source).map((report, index) => (
+                  <a key={`${report.source}-${index}`} href={report.link} target="_blank" rel="noopener noreferrer" className="underline">{report.source}</a>
+                ))}
+              </div>
+            )}
+            {item.documentUrl && /^https?:\/\//i.test(item.documentUrl) && (
+              <a href={item.documentUrl} target="_blank" rel="noopener noreferrer" className="mb-3 block text-xs text-sky-300 underline">Open original document</a>
+            )}
             {loading && (
               <ReaderStatus>
                 <CircularProgress size={24} />

@@ -1,4 +1,6 @@
 import type { FeedItem } from '../types';
+import { canonicalArticleLink, publisherIdentity } from '../../shared/source-policy.js';
+import { isBriefingReport } from '../utils/feedGrouping.ts';
 
 const DEFAULT_WINDOW_HOURS = 36;
 const DEFAULT_MAX_ITEMS = 180;
@@ -100,29 +102,7 @@ function normalizedText(value: string): string {
   return (value.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) || []).join(' ');
 }
 
-function canonicalLink(value: string): string {
-  try {
-    const url = new URL(value);
-    url.hash = '';
-    url.hostname = url.hostname.replace(/^www\./, '').toLocaleLowerCase();
-    [
-      'fbclid',
-      'gclid',
-      'mc_cid',
-      'mc_eid',
-      'ref',
-      'source',
-    ].forEach(parameter => url.searchParams.delete(parameter));
-    [...url.searchParams.keys()]
-      .filter(parameter => parameter.toLocaleLowerCase().startsWith('utm_'))
-      .forEach(parameter => url.searchParams.delete(parameter));
-    url.searchParams.sort();
-    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
-    return url.toString();
-  } catch {
-    return value.trim();
-  }
-}
+const canonicalLink = canonicalArticleLink;
 
 function wordShingles(value: string, width = 3): Set<string> {
   const words = tokenize(value);
@@ -157,6 +137,7 @@ function wireOrigin(item: FeedItem): string | null {
     ['associated-press', [
       /^\s*(?:by\s+)?(?:the\s+)?associated press(?:\s*[—–:-]|\s*\()/im,
       /^\s*\(?AP\)?\s*[—–:-]\s+/m,
+      /^[A-Z][A-Z .'-]+\s+\(AP\)\s*[—–-]/m,
       /\bcopyright\s+(?:\d{4}\s+)?(?:the\s+)?associated press\b/i,
     ]],
     ['afp', [
@@ -228,7 +209,7 @@ function groupIndependentReports(documents: Document[]): Document[][] {
 
 function independentReportCount(cluster: WorkingCluster, groups = groupIndependentReports(cluster.documents)): number {
   const publisherCount = new Set(
-    cluster.documents.map(document => document.item.source)
+    cluster.documents.map(document => document.item.publisher || publisherIdentity(document.item.source))
   ).size;
   return Math.min(groups.length, publisherCount);
 }
@@ -308,7 +289,7 @@ function representativeFor(cluster: WorkingCluster, now: number): Document {
 }
 
 function clusterScore(cluster: WorkingCluster, now: number, independentReports: number): number {
-  const sources = new Set(cluster.documents.map(document => document.item.source));
+  const sources = new Set(cluster.documents.map(document => document.item.publisher || publisherIdentity(document.item.source)));
   const sourceTypes = new Set(cluster.documents.map(document => document.item.sourceType));
   const newest = Math.max(...cluster.documents.map(document => document.timestamp));
   const ageHours = Math.max(0, (now - newest) / (60 * 60 * 1000));
@@ -365,7 +346,7 @@ function uniqueRecentItems(items: FeedItem[], now: number, windowHours: number, 
   return [...items]
     .filter(item => {
       const timestamp = new Date(item.timestamp).getTime();
-      return item.title.trim().length > 0
+      return isBriefingReport(item) && item.title.trim().length > 0
         && item.link.trim().length > 0
         && Number.isFinite(timestamp)
         && timestamp <= now + 15 * 60 * 1000
@@ -472,7 +453,7 @@ export function buildNowBriefing(items: FeedItem[], options: BriefingOptions = {
         supporting,
         itemCount: cluster.documents.length,
         independentReportCount: independentReports,
-        publisherCount: sources.length,
+        publisherCount: new Set(cluster.documents.map(document => document.item.publisher || publisherIdentity(document.item.source))).size,
         coverage: coverageLabel(
           independentReports,
           cluster.documents.length,

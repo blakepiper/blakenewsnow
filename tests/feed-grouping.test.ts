@@ -1,0 +1,94 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { groupFeedItems, isCurrentFeedItem, isBriefingReport } from '../src/utils/feedGrouping.ts';
+import type { FeedItem } from '../src/types.ts';
+import { DEFAULT_SETTINGS, mergeSourceConfigs } from '../src/stores/settings.ts';
+import { sourceWindowDays, canonicalArticleLink, isPromotionalEntry } from '../shared/source-policy.js';
+import { buildNowBriefing } from '../src/ml/nowBriefing.ts';
+import { createRequire } from 'node:module';
+const { RSS_FEEDS } = createRequire(import.meta.url)('../server/data-feeds.cjs');
+const NOW = Date.parse('2026-10-03T16:00:00Z');
+const day = 86400000;
+function item(overrides: Partial<FeedItem> = {}): FeedItem {
+  return { id: 'one', title: 'Central bank revises policy after new inflation data', source: 'BBC', sourceType: 'news', category: 'BBC', timestamp: new Date(NOW - 3600000).toISOString(), link: 'https://example.org/article', ...overrides };
+}
+
+test('server and client agree on every configured source freshness window', () => {
+  for (const feed of Object.values(RSS_FEEDS).flat() as { name: string; maxAgeMs: number }[]) {
+    assert.equal(feed.maxAgeMs, sourceWindowDays(feed.name) * day, feed.name);
+  }
+  assert.equal(isCurrentFeedItem(item({ source: 'PNAS', timestamp: new Date(NOW - 8 * day).toISOString() }), NOW), true);
+  assert.equal(isCurrentFeedItem(item({ source: 'NPR', timestamp: new Date(NOW - 8 * day).toISOString() }), NOW), false);
+  assert.equal(isCurrentFeedItem(item({ source: 'The Markup', timestamp: new Date(NOW - 91 * day).toISOString() }), NOW), false);
+});
+
+test('old articles cannot become fresh through a new social submission', () => {
+  assert.equal(isCurrentFeedItem(item({ source: 'c/news', timestampKind: 'posted', publishedAt: new Date(NOW - 30 * day).toISOString() }), NOW), false);
+  assert.equal(isBriefingReport(item({ source: 'Hacker News', sourceType: 'tech' })), false);
+  assert.equal(isBriefingReport(item({ source: 'Mastodon Trending' })), false);
+  assert.equal(isBriefingReport(item({ source: 'GDELT', timestampKind: 'indexed' })), false);
+});
+
+test('groups canonical article links, preserving the publisher and social context', () => {
+  const grouped = groupFeedItems([
+    item({ source: 'Hacker News', id: 'social', timestamp: new Date(NOW).toISOString(), link: 'http://www.example.org/article?utm_source=hn&at_campaign=rss#comments' }),
+    item(),
+  ]);
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].source, 'BBC');
+  assert.deepEqual(grouped[0].discoverySources, ['Hacker News']);
+  assert.equal(grouped[0].relatedReports?.length, 2);
+  assert.equal(canonicalArticleLink('https://bbc.com/x?at_medium=RSS&at_campaign=feed&utm_source=test'), 'https://bbc.com/x');
+});
+
+test('coauthored publications appear once with every followed author', () => {
+  const grouped = groupFeedItems([
+    item({ source: 'Dawn Song', link: 'https://arxiv.org/abs/2608.14611v2', publisher: 'arXiv' }),
+    item({ source: 'Yoshua Bengio', link: 'https://arxiv.org/pdf/2608.14611v1.pdf', publisher: 'arXiv' }),
+  ]);
+  assert.equal(grouped.length, 1);
+  assert.deepEqual(grouped[0].monitoredAuthors, ['Dawn Song', 'Yoshua Bengio']);
+});
+
+test('merges existing article groups when a later report bridges their URL and title', () => {
+  const grouped = groupFeedItems([
+    item({ source: 'BBC', title: 'Central bank releases its monetary policy decision', link: 'https://example.org/first' }),
+    item({ source: 'Guardian', title: 'Central bank cuts interest rates after inflation falls', link: 'https://example.org/second' }),
+    item({ source: 'NPR', title: 'Central bank cuts interest rates after inflation falls', link: 'https://example.org/first?utm_source=rss' }),
+  ]);
+  assert.equal(grouped.length, 1);
+  assert.deepEqual(new Set(grouped[0].sources), new Set(['BBC', 'Guardian', 'NPR']));
+});
+
+test('similar events and distinct alerts remain separate while exact duplicates group', () => {
+  const first = item({ title: 'Senate debates an energy bill amid economic concerns', link: 'https://example.org/a' });
+  const second = item({ title: 'Senate debates a privacy bill amid economic concerns', link: 'https://example.org/b' });
+  assert.equal(groupFeedItems([first, second]).length, 2);
+  assert.equal(groupFeedItems([
+    item({ source: 'WMATA Alerts', title: 'P12 - Reduced Service', link: 'https://www.wmata.com/ride/alerts-and-advisories.html' }),
+    item({ source: 'WMATA Alerts', title: 'Orange Line - Delays', link: 'https://www.wmata.com/ride/alerts-and-advisories.html' }),
+  ]).length, 2);
+});
+
+test('parent publisher editions are not independent corroboration', () => {
+  const briefing = buildNowBriefing([
+    item({ source: 'BBC', link: 'https://bbc.com/one' }),
+    item({ source: 'BBC Business', id: 'two', title: 'Inflation data prompts central bank policy revision', link: 'https://bbc.com/two' }),
+  ], { now: NOW });
+  assert.equal(briefing.clusters[0].independentReportCount, 1);
+  assert.equal(briefing.clusters[0].publisherCount, 1);
+});
+
+test('filters paid entries without deleting news about state-sponsored violence', () => {
+  assert.equal(isPromotionalEntry({ title: 'Build your AI factory', source: 'The Register', description: 'SPONSORED FEATURE: HPE and NVIDIA' }), true);
+  assert.equal(isPromotionalEntry({ title: 'Report documents state-sponsored violence', source: 'BBC' }), false);
+});
+
+test('source-policy migration disables optional defaults once and preserves subsequent choices', () => {
+  const defaults = DEFAULT_SETTINGS.sources;
+  const stored = defaults.map(source => ({ ...source, enabled: true }));
+  const migrated = mergeSourceConfigs(defaults, stored, true);
+  for (const id of ['4chan-g', '4chan-news', '4chan-pol', '4chan-lit', '4chan-his', 'bluesky-discover']) assert.equal(migrated.find(source => source.id === id)?.enabled, false);
+  assert.equal(migrated.find(source => source.id === 'bbc')?.enabled, true);
+  assert.equal(mergeSourceConfigs(defaults, stored).find(source => source.id === '4chan-g')?.enabled, true);
+});

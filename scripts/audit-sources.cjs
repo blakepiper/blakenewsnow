@@ -1,118 +1,61 @@
 #!/usr/bin/env node
-
-const { RSS_FEEDS } = require('../server/data-feeds.cjs');
-const { filterRecentItems, parseAlexandriaNews, parseRSS } = require('../server/rss.cjs');
-
-const HOUR = 60 * 60 * 1000;
-const DAY = 24 * HOUR;
-const TIMEOUT_MS = 15000;
+const fs = require('node:fs');
+const { RSS_FEEDS, fetchConfiguredFeed } = require('../server/data-feeds.cjs');
+const { parseConfiguredSource } = require('../server/source-adapters.cjs');
+const { filterRecentItems } = require('../server/rss.cjs');
+const { isPromotionalEntry, isFinanceEntry, sourceKind } = require('../shared/source-policy.js');
 
 async function auditFeed(category, feed) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const started = Date.now();
-
   try {
-    const response = await fetch(feed.url, {
-      headers: {
-        Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
-        'User-Agent': 'Mozilla/5.0',
-        ...feed.headers,
-      },
-      redirect: 'follow',
-      signal: controller.signal,
-    });
-    const xml = await response.text();
-    const parsed = feed.parser === 'alexandria-html'
-      ? parseAlexandriaNews(xml, feed.name, feed.url)
-      : parseRSS(xml, feed.name);
-    const current = filterRecentItems(parsed, { maxAgeMs: feed.maxAgeMs || 7 * DAY });
-    const recent48h = filterRecentItems(parsed, { maxAgeMs: 2 * DAY });
-    const filtered = feed.filter ? current.filter(feed.filter) : current;
-    const filtered48h = feed.filter ? recent48h.filter(feed.filter) : recent48h;
-    const newest = current.reduce(
-      (latest, item) => Math.max(latest, item.pubDate?.getTime() || 0),
-      0
-    );
-    const descriptions = filtered.filter(item => item.description).length;
-    const status = !response.ok || parsed.length === 0
-      ? 'FAIL'
-      : filtered.length === 0 || !newest || Date.now() - newest > (feed.maxAgeMs || 7 * DAY)
-        ? 'STALE'
-        : 'OK';
-
-    return {
-      category,
-      name: feed.name,
-      status,
-      http: response.status,
-      parsed: parsed.length,
-      current: filtered.length,
-      recent48h: filtered48h.length,
-      newestHours: newest ? (Date.now() - newest) / HOUR : null,
-      descriptions: filtered.length ? Math.round((descriptions / filtered.length) * 100) : 0,
-      durationMs: Date.now() - started,
-      error: '',
-    };
+    const { data, status } = await fetchConfiguredFeed(feed, { timeout: 15000,
+      accept: feed.parser === 'scientist-publications' && feed.provider !== 'arxiv' ? 'application/json' : '*/*' });
+    const parsed = parseConfiguredSource(data, feed);
+    const eligible = filterRecentItems(parsed, { maxAgeMs: feed.maxAgeMs })
+      .filter(item => !isPromotionalEntry(item) && (!feed.filter || feed.filter(item))
+        && (category !== 'finance' || isFinanceEntry(item)));
+    const newest = parsed.filter(x => x.pubDate && Number.isFinite(+x.pubDate) && +x.pubDate <= Date.now()).sort((a, b) => b.pubDate - a.pubDate)[0];
+    const health = eligible.length ? 'OK' : sourceKind(feed.name) === 'author' ? 'NO_RECENT_PUBLICATIONS'
+      : parsed.length ? 'NO_RECENT_ITEMS' : ['legistar', 'wmata'].includes(feed.parser) ? 'NO_ENTRIES' : 'INVALID_RESPONSE';
+    return { category, name: feed.name, url: feed.url, health, http: status, parsed: parsed.length,
+      eligible: eligible.length, windowDays: feed.maxAgeMs / 86400000, newest: newest?.pubDate.toISOString() || null,
+      newestDays: newest ? (Date.now() - newest.pubDate) / 86400000 : null,
+      durationMs: Date.now() - started, samples: eligible.slice(0, 3).map(x => ({ title: x.title, link: x.link })) };
   } catch (error) {
-    return {
-      category,
-      name: feed.name,
-      status: 'FAIL',
-      http: '-',
-      parsed: 0,
-      current: 0,
-      recent48h: 0,
-      newestHours: null,
-      descriptions: 0,
-      durationMs: Date.now() - started,
-      error: error.name === 'AbortError' ? 'timeout' : error.message,
-    };
-  } finally {
-    clearTimeout(timer);
+    return { category, name: feed.name, url: feed.url, health: 'UNAVAILABLE', error: error.message, durationMs: Date.now() - started };
   }
 }
 
 async function main() {
-  const uniqueFeeds = [];
-  const seenUrls = new Set();
-  for (const [category, feeds] of Object.entries(RSS_FEEDS)) {
-    for (const feed of feeds) {
-      if (seenUrls.has(feed.url)) continue;
-      seenUrls.add(feed.url);
-      uniqueFeeds.push({ category, feed });
-    }
+  const byUrl = new Map();
+  for (const [category, feeds] of Object.entries(RSS_FEEDS)) for (const feed of feeds) {
+    if (!byUrl.has(feed.url)) byUrl.set(feed.url, { category, feed });
   }
-
-  const results = await Promise.all(
-    uniqueFeeds.map(({ category, feed }) => auditFeed(category, feed))
-  );
-
-  console.table(results.map(result => ({
-    Type: result.category,
-    Source: result.name,
-    Health: result.status,
-    HTTP: result.http,
-    Parsed: result.parsed,
-    '7d': result.current,
-    '48h': result.recent48h,
-    'Newest h': result.newestHours == null ? '-' : result.newestHours.toFixed(1),
-    'Desc %': result.descriptions,
-    'Time ms': result.durationMs,
-  })));
-
-  const unhealthy = results.filter(result => result.status !== 'OK');
-  if (unhealthy.length) {
-    for (const result of unhealthy) {
-      console.error(`${result.status}: ${result.name}${result.error ? ` — ${result.error}` : ''}`);
-    }
-    process.exitCode = 1;
-  } else {
-    console.log(`All ${results.length} unique RSS/Atom sources are current and parseable.`);
+  const unique = [...byUrl.values()];
+  const results = [];
+  async function workers(entries, count, gap = 0) {
+    let next = 0;
+    await Promise.all(Array.from({ length: count }, async () => {
+      while (next < entries.length) {
+        const { category, feed } = entries[next++];
+        results.push(await auditFeed(category, feed));
+        if (gap && next < entries.length) await new Promise(resolve => setTimeout(resolve, gap));
+      }
+    }));
   }
+  await Promise.all([
+    workers(unique.filter(x => !['arxiv', 'crossref'].includes(x.feed.provider)), 6),
+    workers(unique.filter(x => x.feed.provider === 'arxiv'), 1, 3100),
+    workers(unique.filter(x => x.feed.provider === 'crossref'), 1, 1500),
+  ]);
+  results.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  console.table(results.map(x => ({ Type: x.category, Source: x.name, Health: x.health, HTTP: x.http || '-', Parsed: x.parsed ?? '-',
+    Eligible: x.eligible ?? '-', 'Window days': x.windowDays ?? '-', 'Newest days': x.newestDays == null ? '-' : x.newestDays.toFixed(1) })));
+  const output = process.argv.find(x => x.startsWith('--json='))?.slice(7);
+  if (output) fs.writeFileSync(output, JSON.stringify({ checkedAt: new Date().toISOString(), results }, null, 2));
+  const failures = results.filter(x => ['UNAVAILABLE', 'INVALID_RESPONSE'].includes(x.health));
+  for (const x of failures) console.error(`${x.name}: ${x.error || x.health}`);
+  console.log(`${results.length} distinct endpoints checked; ${failures.length} delivery/parser failures. Quiet publication monitors are not classified as inactive researchers.`);
+  if (failures.length) process.exitCode = 1;
 }
-
-main().catch(error => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main().catch(error => { console.error(error); process.exitCode = 1; });

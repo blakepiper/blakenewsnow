@@ -11,6 +11,7 @@ interface UnifiedFeedProps {
   loading: boolean;
   error: string | null;
   filter: FilterType;
+  emptyMessage?: string;
   selectedIndex: number;
   onSelectIndex: (index: number) => void;
   readArticles: string[];
@@ -37,6 +38,7 @@ export function UnifiedFeed({
   loading,
   error,
   filter,
+  emptyMessage = 'No items to show.',
   selectedIndex,
   onSelectIndex,
   readArticles,
@@ -115,7 +117,7 @@ export function UnifiedFeed({
   if (filteredItems.length === 0) {
     return (
       <div className="px-3 py-8 text-center text-white/50 text-sm">
-        No items to show.
+        {emptyMessage}
       </div>
     );
   }

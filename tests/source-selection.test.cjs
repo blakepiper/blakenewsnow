@@ -40,17 +40,17 @@ test('fills unused slots when the source pool is too small for the cap', () => {
   const result = selectDiverseItems(input, 5, 2);
 
   assert.equal(result.length, 5);
-  assert.deepEqual(result.map(entry => entry.id), [1, 2, 5, 3, 4]);
+  assert.deepEqual(result.map(entry => entry.id), [1, 2, 3, 4, 5]);
 });
 
 test('filters requested headline publishers before applying the response limit', () => {
   const input = [
     ...Array.from({ length: 50 }, (_, index) => item('Other', index)),
-    item('Bloomberg', 51),
-    item('Financial Times', 52),
-    item('Wall Street Journal', 53),
+    item('NPR', 51),
+    item('BBC', 52),
+    item('Guardian', 53),
   ];
-  const requested = new Set(['Bloomberg', 'Financial Times', 'Wall Street Journal']);
+  const requested = new Set(['NPR', 'BBC', 'Guardian']);
 
   const result = selectHeadlineItems(input, requested);
 
@@ -58,5 +58,5 @@ test('filters requested headline publishers before applying the response limit',
 });
 
 test('returns no headlines when the client explicitly selects no news publishers', () => {
-  assert.deepEqual(selectHeadlineItems([item('Bloomberg', 1)], new Set()), []);
+  assert.deepEqual(selectHeadlineItems([item('NPR', 1)], new Set()), []);
 });

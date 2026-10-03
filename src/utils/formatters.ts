@@ -1,3 +1,16 @@
+import type { FeedItem } from '../types.ts';
+
+import { SCIENTIST_SOURCES, sourceWindowDays } from '../../shared/source-policy.js';
+export { SCIENTIST_SOURCES } from '../../shared/source-policy.js';
+
+export function isScientistSource(source: string): boolean {
+  return SCIENTIST_SOURCES.some(name => name === source);
+}
+
+export function getFeedItemMaxAge(source: string): number {
+  return sourceWindowDays(source) * 24 * 60 * 60 * 1000;
+}
+
 export function formatTimeAgo(timestamp: string): string {
   const now = new Date();
   const date = new Date(timestamp);
@@ -21,6 +34,17 @@ export function formatScore(score: number): string {
 export function getSourceColor(source: string): string {
   const colors: Record<string, string> = {
     'NPR': 'bg-blue-500',
+    'Bloomberg': 'bg-amber-600',
+    'Financial Times': 'bg-rose-600',
+    'Wall Street Journal': 'bg-slate-400',
+    'CNBC Economy': 'bg-blue-600',
+    'CNBC IPOs': 'bg-violet-600',
+    'CoinDesk': 'bg-yellow-600',
+    'BBC Business': 'bg-amber-500',
+    'Guardian Business': 'bg-indigo-500',
+    'ECB': 'bg-emerald-700',
+    'WTO News': 'bg-teal-700',
+
     'BBC': 'bg-amber-500',
     'CBC News': 'bg-red-600',
     'DW': 'bg-blue-700',
@@ -125,6 +149,61 @@ export function getSourceColor(source: string): string {
     'STAT': 'bg-pink-600',
     'WHO': 'bg-blue-600',
     'Undark': 'bg-slate-600',
+    'Karl Friston': 'bg-indigo-500',
+    'Michael Levin': 'bg-teal-500',
+    'Chris Fields': 'bg-violet-500',
+    'Geoffrey Hinton': 'bg-blue-500',
+    'Yann LeCun': 'bg-cyan-500',
+    'Percy Liang': 'bg-emerald-500',
+    'Stuart Russell': 'bg-amber-500',
+    'Yoshua Bengio': 'bg-indigo-600',
+    'Fei-Fei Li': 'bg-blue-600',
+    'Yejin Choi': 'bg-cyan-600',
+    'Dawn Song': 'bg-teal-600',
+    'Chris Olah': 'bg-violet-600',
+    'Neel Nanda': 'bg-purple-600',
+    'Paul Christiano': 'bg-sky-600',
+    'Dan Hendrycks': 'bg-amber-600',
+    'Myles Allen': 'bg-emerald-600',
+    'Piers Forster': 'bg-teal-600',
+    'Gavin Schmidt': 'bg-cyan-600',
+    'Friederike Otto': 'bg-green-600',
+    'Richard Alley': 'bg-sky-600',
+    'Corinne Le Quéré': 'bg-lime-600',
+    'Marshall Burke': 'bg-emerald-600',
+    'Jesse Jenkins': 'bg-teal-600',
+    'Michael Mann': 'bg-green-600',
+    'Zeke Hausfather': 'bg-cyan-600',
+    'Matt Kaeberlein': 'bg-indigo-600',
+    'Valter Longo': 'bg-green-600',
+    'David Sinclair': 'bg-blue-600',
+    'Steve Horvath': 'bg-violet-600',
+    'Michael Snyder': 'bg-cyan-600',
+    'Herman Pontzer': 'bg-amber-600',
+    'Vishwa Deep Dixit': 'bg-teal-600',
+    'Rhonda Patrick': 'bg-emerald-600',
+    'Peter Attia': 'bg-sky-600',
+    'Chris Masterjohn': 'bg-purple-600',
+    'Lisa Kaltenegger': 'bg-indigo-600',
+    'Nikku Madhusudhan': 'bg-violet-600',
+    'Sara Seager': 'bg-blue-600',
+    'David Kipping': 'bg-sky-600',
+    'Victoria Meadows': 'bg-cyan-600',
+    'Ravi Kopparapu': 'bg-teal-600',
+    'Jessie Christiansen': 'bg-purple-600',
+    'Kevin Hand': 'bg-slate-600',
+    'Sara Imari Walker': 'bg-fuchsia-600',
+    'Jason Wright': 'bg-indigo-600',
+    'Jennifer Doudna': 'bg-emerald-600',
+    'Feng Zhang': 'bg-blue-600',
+    'David Liu': 'bg-violet-600',
+    'George Church': 'bg-purple-600',
+    'Jay Keasling': 'bg-green-600',
+    'James Collins': 'bg-teal-600',
+    'Pamela Silver': 'bg-pink-600',
+    'Drew Endy': 'bg-cyan-600',
+    'Timothy Lu': 'bg-sky-600',
+    'Cameron Myhrvold': 'bg-indigo-600',
     'WTOP': 'bg-blue-700',
     'WAMU': 'bg-purple-700',
     'Alexandria City': 'bg-cyan-700',
@@ -140,7 +219,7 @@ export function getSourceColor(source: string): string {
   return colors[source] || 'bg-gray-500';
 }
 
-export function getSourceCategory(source: string): 'news' | 'tech' | 'science' | 'social' | 'local' {
+export function getSourceCategory(source: string): FeedItem['sourceType'] {
   const techSources = [
     'Hacker News',
     '/g/',
@@ -167,6 +246,8 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'science' |
     'Cloudflare',
   ];
   const scienceSources = [
+    ...SCIENTIST_SOURCES,
+    'KFF Health News',
     'ScienceDaily',
     'Phys.org',
     'Science News',
@@ -194,7 +275,26 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'science' |
     'WHO',
     'Undark',
   ];
+  const financeSources = [
+    'BEA', 'USTR', 'Federal Register Trade', 'SEC IPO Filings', 'SEC Foreign IPO Filings',
+    'Bank of Japan', 'CFTC', 'Ethereum Foundation',
+    'Bloomberg',
+    'Financial Times',
+    'Wall Street Journal',
+    'SEC',
+    'Federal Reserve',
+    'BLS',
+    'EIA',
+    'CNBC Economy',
+    'CNBC IPOs',
+    'CoinDesk',
+    'BBC Business',
+    'Guardian Business',
+    'ECB',
+    'WTO News',
+  ];
   const localSources = [
+    'WMATA Alerts', 'Alexandria Council',
     'WTOP',
     'WAMU',
     'Alexandria City',
@@ -209,19 +309,21 @@ export function getSourceCategory(source: string): 'news' | 'tech' | 'science' |
   if (techSources.includes(source)) return 'tech';
   if (scienceSources.includes(source)) return 'science';
   if (localSources.includes(source)) return 'local';
+  if (financeSources.includes(source)) return 'finance';
   if (source.startsWith('c/')) return 'social';
   if (source.startsWith('/') && source.endsWith('/')) return 'social';
   if (['Bluesky Discover', 'Mastodon Trending'].includes(source)) return 'social';
   return 'news';
 }
 
-export function getCategoryDotColor(sourceType: 'news' | 'tech' | 'science' | 'social' | 'local'): string {
+export function getCategoryDotColor(sourceType: FeedItem['sourceType']): string {
   switch (sourceType) {
     case 'news': return 'bg-blue-400';
     case 'tech': return 'bg-purple-400';
     case 'science': return 'bg-emerald-400';
     case 'social': return 'bg-orange-400';
     case 'local': return 'bg-cyan-400';
+    case 'finance': return 'bg-amber-400';
   }
 }
 

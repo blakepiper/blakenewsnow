@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE, REFRESH_INTERVALS } from '../config';
 import { getSourceCategory } from '../utils/formatters';
+import { groupFeedItems, isCurrentFeedItem, isBriefingReport } from '../utils/feedGrouping';
 import type { FeedItem } from '../types';
 
-interface RawHeadline {
+interface RawHeadline extends Partial<FeedItem> {
   id: string;
   title: string;
   source: string;
@@ -17,7 +18,7 @@ interface CustomFeedDefinition {
   url: string;
 }
 
-interface RawSocialPost {
+interface RawSocialPost extends Partial<FeedItem> {
   id: string;
   title: string;
   source: string;
@@ -30,7 +31,7 @@ interface RawSocialPost {
   description?: string;
 }
 
-interface RawHNStory {
+interface RawHNStory extends Partial<FeedItem> {
   id: string;
   title: string;
   source: string;
@@ -52,22 +53,6 @@ interface Raw4chanThread {
   timestamp: string;
 }
 
-function normalizeTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-}
-
-function titlesMatch(a: string, b: string): boolean {
-  const wordsA = new Set(normalizeTitle(a).split(/\s+/).filter(w => w.length > 3));
-  const wordsB = new Set(normalizeTitle(b).split(/\s+/).filter(w => w.length > 3));
-  if (wordsA.size === 0 || wordsB.size === 0) return false;
-  let shared = 0;
-  for (const w of wordsA) {
-    if (wordsB.has(w)) shared++;
-  }
-  const smaller = Math.min(wordsA.size, wordsB.size);
-  return smaller > 0 && shared / smaller > 0.7;
-}
-
 function getDomain(url: string): string {
   if (!url) return '';
   try {
@@ -76,8 +61,6 @@ function getDomain(url: string): string {
     return '';
   }
 }
-
-const MAX_FEED_ITEM_AGE = 7 * 24 * 60 * 60 * 1000;
 
 export function useUnifiedFeed(
   enabledSources: ReadonlySet<string>,
@@ -101,16 +84,17 @@ export function useUnifiedFeed(
       const customParams = new URLSearchParams({
         feeds: JSON.stringify(customFeeds),
       });
-      const [headlinesRes, techRes, scienceRes, localRes, customRes, lemmyRes, openSocialRes, hnRes, chanRes] = await Promise.all([
+      const [headlinesRes, techRes, scienceRes, localRes, financeRes, customRes, lemmyRes, openSocialRes, hnRes, chanRes] = await Promise.all([
         fetch(`${API_BASE}/api/headlines?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch(`${API_BASE}/api/tech`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/tech?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/science?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/local?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/finance?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${API_BASE}/api/custom?${customParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch(`${API_BASE}/api/lemmy`).then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch(`${API_BASE}/api/open-social`).then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch(`${API_BASE}/api/hackernews`).then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch(`${API_BASE}/api/4chan`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/lemmy?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/open-social?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/hackernews?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/api/4chan?${sourceParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
       ]);
 
       const feedItems: FeedItem[] = [];
@@ -118,6 +102,7 @@ export function useUnifiedFeed(
       // Normalize headlines
       (headlinesRes as RawHeadline[]).forEach((h) => {
         feedItems.push({
+          ...h,
           id: h.id,
           title: h.title,
           source: h.source,
@@ -132,6 +117,7 @@ export function useUnifiedFeed(
       // Normalize tech news
       (techRes as RawHeadline[]).forEach((h) => {
         feedItems.push({
+          ...h,
           id: h.id,
           title: h.title,
           source: h.source,
@@ -146,6 +132,7 @@ export function useUnifiedFeed(
       // Normalize science reporting and journal articles
       (scienceRes as RawHeadline[]).forEach((h) => {
         feedItems.push({
+          ...h,
           id: h.id,
           title: h.title,
           source: h.source,
@@ -160,6 +147,7 @@ export function useUnifiedFeed(
       // Normalize DC and Alexandria local news
       (localRes as RawHeadline[]).forEach((h) => {
         feedItems.push({
+          ...h,
           id: h.id,
           title: h.title,
           source: h.source,
@@ -171,9 +159,25 @@ export function useUnifiedFeed(
         });
       });
 
+      // Normalize finance reporting and official economic releases
+      (financeRes as RawHeadline[]).forEach((h) => {
+        feedItems.push({
+          ...h,
+          id: h.id,
+          title: h.title,
+          source: h.source,
+          sourceType: 'finance',
+          category: h.source,
+          timestamp: h.timestamp,
+          link: h.link || '',
+          description: h.description,
+        });
+      });
+
       // Normalize user-provided public RSS/Atom feeds
       (customRes as RawHeadline[]).forEach((h) => {
         feedItems.push({
+          ...h,
           id: h.id,
           title: h.title,
           source: h.source,
@@ -188,6 +192,7 @@ export function useUnifiedFeed(
       // Normalize federated social news
       (lemmyRes as RawSocialPost[]).forEach((post) => {
         feedItems.push({
+          ...post,
           id: post.id,
           title: post.title,
           source: post.source,
@@ -205,6 +210,7 @@ export function useUnifiedFeed(
       // Normalize credential-free Bluesky and Mastodon signals
       (openSocialRes as RawSocialPost[]).forEach((post) => {
         feedItems.push({
+          ...post,
           id: post.id,
           title: post.title,
           source: post.source,
@@ -222,6 +228,7 @@ export function useUnifiedFeed(
       // Normalize HN
       (hnRes as RawHNStory[]).forEach((h) => {
         feedItems.push({
+          ...h,
           id: h.id,
           title: h.title,
           source: 'Hacker News',
@@ -252,26 +259,12 @@ export function useUnifiedFeed(
 
       // Treat the client as a second line of defense against invalid upstream data.
       const now = Date.now();
-      const validItems = feedItems.filter(item => {
-        const timestamp = new Date(item.timestamp).getTime();
-        return enabledSources.has(item.source)
-          && item.link
-          && Number.isFinite(timestamp)
-          && timestamp <= now + 15 * 60 * 1000
-          && timestamp >= now - MAX_FEED_ITEM_AGE;
-      });
+      const validItems = feedItems.filter(item => enabledSources.has(item.source) && isCurrentFeedItem(item, now));
 
       validItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
       // Deduplicate across sources
-      const deduped: FeedItem[] = [];
-      for (const item of validItems) {
-        const isDuplicate = item.sourceType !== 'local'
-          && deduped.some(existing => existing.sourceType !== 'local' && titlesMatch(existing.title, item.title));
-        if (!isDuplicate) {
-          deduped.push(item);
-        }
-      }
+      const deduped = groupFeedItems(validItems);
 
       if (requestSequence !== requestSequenceRef.current) return;
 
@@ -297,7 +290,7 @@ export function useUnifiedFeed(
 
       // Preserve corroborating reports for event clustering even when the visible feed
       // collapses near-identical headlines from different publishers.
-      setBriefingItems(validItems);
+      setBriefingItems(validItems.filter(isBriefingReport));
       setItems(deduped);
       setError(null);
     } catch (err) {

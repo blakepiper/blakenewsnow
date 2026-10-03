@@ -60,7 +60,8 @@ function inferDateFromUrl(link) {
   if (!match) return null;
 
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
-  return Number.isFinite(date.getTime()) ? date : null;
+  return Number.isFinite(date.getTime()) && date.getUTCFullYear() === Number(match[1])
+    && date.getUTCMonth() + 1 === Number(match[2]) && date.getUTCDate() === Number(match[3]) ? date : null;
 }
 
 function inferDateFromTitle(title) {
@@ -132,6 +133,7 @@ function parseRSS(xml, sourceName) {
       dateSource,
       description: decodeEntities(stripHtml(descriptionRaw)).slice(0, 1200),
       source: sourceName,
+      entryCategory: asArray(entry.category).map(category => textValue(category) || textValue(category?.['@_term'])).join(' '),
     }];
   });
 }

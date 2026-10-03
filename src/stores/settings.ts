@@ -35,6 +35,7 @@ export interface Settings {
   showSourceIcons: boolean;
 
   readArticles: string[];
+  sourcePolicyVersion: number;
 }
 
 export interface PaneSizes {
@@ -56,9 +57,6 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'abc', name: 'ABC News', enabled: true, category: 'news', priority: 7 },
   { id: 'cbs', name: 'CBS News', enabled: true, category: 'news', priority: 8 },
   { id: 'nytimes', name: 'NY Times', enabled: true, category: 'news', priority: 9 },
-  { id: 'bloomberg', name: 'Bloomberg', enabled: true, category: 'news', priority: 10 },
-  { id: 'financial-times', name: 'Financial Times', enabled: true, category: 'news', priority: 11 },
-  { id: 'wall-street-journal', name: 'Wall Street Journal', enabled: true, category: 'news', priority: 12 },
   { id: 'pbs', name: 'PBS NewsHour', enabled: true, category: 'news', priority: 13 },
   { id: 'nbc', name: 'NBC News', enabled: true, category: 'news', priority: 14 },
   { id: 'axios', name: 'Axios', enabled: true, category: 'news', priority: 15 },
@@ -86,10 +84,6 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'congress', name: 'Congress.gov', enabled: true, category: 'news', priority: 38 },
   { id: 'cisa', name: 'CISA', enabled: true, category: 'news', priority: 39 },
   { id: 'noaa', name: 'NOAA', enabled: true, category: 'news', priority: 40 },
-  { id: 'sec', name: 'SEC', enabled: true, category: 'news', priority: 41 },
-  { id: 'federal-reserve', name: 'Federal Reserve', enabled: true, category: 'news', priority: 42 },
-  { id: 'bls', name: 'BLS', enabled: true, category: 'news', priority: 43 },
-  { id: 'eia', name: 'EIA', enabled: true, category: 'news', priority: 44 },
   { id: 'fda-press-releases', name: 'FDA Press Releases', enabled: true, category: 'news', priority: 45 },
   { id: 'fda-recalls', name: 'FDA Recalls', enabled: true, category: 'news', priority: 46 },
   { id: 'cdc-travel-notices', name: 'CDC Travel Notices', enabled: true, category: 'news', priority: 47 },
@@ -98,7 +92,7 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'icij', name: 'ICIJ', enabled: true, category: 'news', priority: 50 },
   { id: 'bellingcat', name: 'Bellingcat', enabled: true, category: 'news', priority: 51 },
   // Tech
-  { id: '4chan-g', name: '4chan /g/', apiSources: ['/g/'], enabled: true, category: 'tech', priority: 77 },
+  { id: '4chan-g', name: '4chan /g/', apiSources: ['/g/'], enabled: false, category: 'tech', priority: 77 },
   { id: 'hackernews', name: 'Hacker News', enabled: true, category: 'tech', priority: 52 },
   { id: 'arstechnica', name: 'Ars Technica', enabled: true, category: 'tech', priority: 53 },
   { id: 'theverge', name: 'The Verge', enabled: true, category: 'tech', priority: 54 },
@@ -126,12 +120,12 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'lemmy-technology', name: 'Lemmy c/technology', apiSources: ['c/technology'], enabled: true, category: 'social', priority: 38 },
   { id: 'lemmy-politics', name: 'Lemmy c/politics', apiSources: ['c/politics'], enabled: true, category: 'social', priority: 39 },
   { id: 'lemmy-science', name: 'Lemmy c/science', apiSources: ['c/science'], enabled: true, category: 'social', priority: 40 },
-  { id: 'bluesky-discover', name: 'Bluesky Discover', enabled: true, category: 'social', priority: 41 },
+  { id: 'bluesky-discover', name: 'Bluesky Discover', enabled: false, category: 'social', priority: 41 },
   { id: 'mastodon-trending', name: 'Mastodon Trending', enabled: true, category: 'social', priority: 42 },
-  { id: '4chan-news', name: '4chan /news/', apiSources: ['/news/'], enabled: true, category: 'social', priority: 43 },
-  { id: '4chan-pol', name: '4chan /pol/', apiSources: ['/pol/'], enabled: true, category: 'social', priority: 44 },
-  { id: '4chan-lit', name: '4chan /lit/', apiSources: ['/lit/'], enabled: true, category: 'social', priority: 45 },
-  { id: '4chan-his', name: '4chan /his/', apiSources: ['/his/'], enabled: true, category: 'social', priority: 46 },
+  { id: '4chan-news', name: '4chan /news/', apiSources: ['/news/'], enabled: false, category: 'social', priority: 43 },
+  { id: '4chan-pol', name: '4chan /pol/', apiSources: ['/pol/'], enabled: false, category: 'social', priority: 44 },
+  { id: '4chan-lit', name: '4chan /lit/', apiSources: ['/lit/'], enabled: false, category: 'social', priority: 45 },
+  { id: '4chan-his', name: '4chan /his/', apiSources: ['/his/'], enabled: false, category: 'social', priority: 46 },
   // Science news
   { id: 'science-daily', name: 'ScienceDaily', enabled: true, category: 'science', priority: 46 },
   { id: 'phys-org', name: 'Phys.org', enabled: true, category: 'science', priority: 47 },
@@ -161,6 +155,93 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { id: 'stat', name: 'STAT', enabled: true, category: 'science', priority: 79 },
   { id: 'who', name: 'WHO', enabled: true, category: 'science', priority: 80 },
   { id: 'undark', name: 'Undark', enabled: true, category: 'science', priority: 81 },
+  { id: 'karl-friston', name: 'Karl Friston', enabled: true, category: 'science', priority: 82 },
+  { id: 'michael-levin', name: 'Michael Levin', enabled: true, category: 'science', priority: 83 },
+  { id: 'chris-fields', name: 'Chris Fields', enabled: true, category: 'science', priority: 84 },
+  { id: 'geoffrey-hinton', name: 'Geoffrey Hinton', enabled: true, category: 'science', priority: 85 },
+  { id: 'yann-lecun', name: 'Yann LeCun', enabled: true, category: 'science', priority: 86 },
+  { id: 'percy-liang', name: 'Percy Liang', enabled: true, category: 'science', priority: 87 },
+  { id: 'stuart-russell', name: 'Stuart Russell', enabled: true, category: 'science', priority: 88 },
+  { id: 'yoshua-bengio', name: 'Yoshua Bengio', enabled: true, category: 'science', priority: 119 },
+  { id: 'fei-fei-li', name: 'Fei-Fei Li', enabled: true, category: 'science', priority: 120 },
+  { id: 'yejin-choi', name: 'Yejin Choi', enabled: true, category: 'science', priority: 121 },
+  { id: 'dawn-song', name: 'Dawn Song', enabled: true, category: 'science', priority: 122 },
+  { id: 'chris-olah', name: 'Chris Olah', enabled: true, category: 'science', priority: 123 },
+  { id: 'neel-nanda', name: 'Neel Nanda', enabled: true, category: 'science', priority: 124 },
+  { id: 'paul-christiano', name: 'Paul Christiano', enabled: true, category: 'science', priority: 125 },
+  { id: 'dan-hendrycks', name: 'Dan Hendrycks', enabled: true, category: 'science', priority: 126 },
+  // Climate scientists (identity-matched publications)
+  { id: 'myles-allen', name: 'Myles Allen', enabled: true, category: 'science', priority: 89 },
+  { id: 'piers-forster', name: 'Piers Forster', enabled: true, category: 'science', priority: 90 },
+  { id: 'gavin-schmidt', name: 'Gavin Schmidt', enabled: true, category: 'science', priority: 91 },
+  { id: 'friederike-otto', name: 'Friederike Otto', enabled: true, category: 'science', priority: 92 },
+  { id: 'richard-alley', name: 'Richard Alley', enabled: true, category: 'science', priority: 93 },
+  { id: 'corinne-le-quere', name: 'Corinne Le Quéré', enabled: true, category: 'science', priority: 94 },
+  { id: 'marshall-burke', name: 'Marshall Burke', enabled: true, category: 'science', priority: 95 },
+  { id: 'jesse-jenkins', name: 'Jesse Jenkins', enabled: true, category: 'science', priority: 96 },
+  { id: 'michael-mann', name: 'Michael Mann', enabled: true, category: 'science', priority: 97 },
+  { id: 'zeke-hausfather', name: 'Zeke Hausfather', enabled: true, category: 'science', priority: 98 },
+  // Aging, nutrition, and metabolic health publications
+  { id: 'matt-kaeberlein', name: 'Matt Kaeberlein', enabled: true, category: 'science', priority: 99 },
+  { id: 'valter-longo', name: 'Valter Longo', enabled: true, category: 'science', priority: 100 },
+  { id: 'david-sinclair', name: 'David Sinclair', enabled: true, category: 'science', priority: 101 },
+  { id: 'steve-horvath', name: 'Steve Horvath', enabled: true, category: 'science', priority: 102 },
+  { id: 'michael-snyder', name: 'Michael Snyder', enabled: true, category: 'science', priority: 103 },
+  { id: 'herman-pontzer', name: 'Herman Pontzer', enabled: true, category: 'science', priority: 104 },
+  { id: 'vishwa-deep-dixit', name: 'Vishwa Deep Dixit', enabled: true, category: 'science', priority: 105 },
+  { id: 'rhonda-patrick', name: 'Rhonda Patrick', enabled: true, category: 'science', priority: 106 },
+  { id: 'peter-attia', name: 'Peter Attia', enabled: true, category: 'science', priority: 107 },
+  { id: 'chris-masterjohn', name: 'Chris Masterjohn', enabled: true, category: 'science', priority: 108 },
+  // Exoplanets, astrobiology, and planetary science publications
+  { id: 'lisa-kaltenegger', name: 'Lisa Kaltenegger', enabled: true, category: 'science', priority: 109 },
+  { id: 'nikku-madhusudhan', name: 'Nikku Madhusudhan', enabled: true, category: 'science', priority: 110 },
+  { id: 'sara-seager', name: 'Sara Seager', enabled: true, category: 'science', priority: 111 },
+  { id: 'david-kipping', name: 'David Kipping', enabled: true, category: 'science', priority: 112 },
+  { id: 'victoria-meadows', name: 'Victoria Meadows', enabled: true, category: 'science', priority: 113 },
+  { id: 'ravi-kopparapu', name: 'Ravi Kopparapu', enabled: true, category: 'science', priority: 114 },
+  { id: 'jessie-christiansen', name: 'Jessie Christiansen', enabled: true, category: 'science', priority: 115 },
+  { id: 'kevin-hand', name: 'Kevin Hand', enabled: true, category: 'science', priority: 116 },
+  { id: 'sara-imari-walker', name: 'Sara Imari Walker', enabled: true, category: 'science', priority: 117 },
+  { id: 'jason-wright', name: 'Jason Wright', enabled: true, category: 'science', priority: 118 },
+  // Genome engineering and synthetic biology publications
+  { id: 'jennifer-doudna', name: 'Jennifer Doudna', enabled: true, category: 'science', priority: 127 },
+  { id: 'feng-zhang', name: 'Feng Zhang', enabled: true, category: 'science', priority: 128 },
+  { id: 'david-liu', name: 'David Liu', enabled: true, category: 'science', priority: 129 },
+  { id: 'george-church', name: 'George Church', enabled: true, category: 'science', priority: 130 },
+  { id: 'jay-keasling', name: 'Jay Keasling', enabled: true, category: 'science', priority: 131 },
+  { id: 'james-collins', name: 'James Collins', enabled: true, category: 'science', priority: 132 },
+  { id: 'pamela-silver', name: 'Pamela Silver', enabled: true, category: 'science', priority: 133 },
+  { id: 'drew-endy', name: 'Drew Endy', enabled: true, category: 'science', priority: 134 },
+  { id: 'timothy-lu', name: 'Timothy Lu', enabled: true, category: 'science', priority: 135 },
+  { id: 'cameron-myhrvold', name: 'Cameron Myhrvold', enabled: true, category: 'science', priority: 136 },
+  { id: 'daily-maverick', name: 'Daily Maverick', enabled: true, category: 'news', priority: 35 },
+  { id: 'global-voices', name: 'Global Voices', enabled: true, category: 'news', priority: 35 },
+  { id: 'kff-health-news', name: 'KFF Health News', enabled: true, category: 'science', priority: 81 },
+  { id: 'wmata-alerts', name: 'WMATA Alerts', enabled: true, category: 'local', priority: 81 },
+  { id: 'alexandria-council', name: 'Alexandria Council', enabled: true, category: 'local', priority: 81 },
+  { id: 'bea', name: 'BEA', enabled: true, category: 'finance', priority: 41 },
+  { id: 'ustr', name: 'USTR', enabled: true, category: 'finance', priority: 41 },
+  { id: 'federal-register-trade', name: 'Federal Register Trade', enabled: true, category: 'finance', priority: 41 },
+  { id: 'sec-ipo-filings', name: 'SEC IPO Filings', enabled: true, category: 'finance', priority: 41 },
+  { id: 'sec-foreign-ipo-filings', name: 'SEC Foreign IPO Filings', enabled: true, category: 'finance', priority: 41 },
+  { id: 'bank-of-japan', name: 'Bank of Japan', enabled: true, category: 'finance', priority: 41 },
+  { id: 'cftc', name: 'CFTC', enabled: true, category: 'finance', priority: 41 },
+  { id: 'ethereum-foundation', name: 'Ethereum Foundation', enabled: true, category: 'finance', priority: 75 },
+  // Finance reporting and primary economic releases
+  { id: 'bloomberg', name: 'Bloomberg', enabled: true, category: 'finance', priority: 10 },
+  { id: 'financial-times', name: 'Financial Times', enabled: true, category: 'finance', priority: 11 },
+  { id: 'wall-street-journal', name: 'Wall Street Journal', enabled: true, category: 'finance', priority: 12 },
+  { id: 'sec', name: 'SEC', enabled: true, category: 'finance', priority: 41 },
+  { id: 'federal-reserve', name: 'Federal Reserve', enabled: true, category: 'finance', priority: 42 },
+  { id: 'bls', name: 'BLS', enabled: true, category: 'finance', priority: 43 },
+  { id: 'eia', name: 'EIA', enabled: true, category: 'finance', priority: 44 },
+  { id: 'cnbc-economy', name: 'CNBC Economy', enabled: true, category: 'finance', priority: 137 },
+  { id: 'cnbc-ipos', name: 'CNBC IPOs', enabled: true, category: 'finance', priority: 138 },
+  { id: 'coindesk', name: 'CoinDesk', enabled: true, category: 'finance', priority: 139 },
+  { id: 'bbc-business', name: 'BBC Business', enabled: true, category: 'finance', priority: 140 },
+  { id: 'guardian-business', name: 'Guardian Business', enabled: true, category: 'finance', priority: 141 },
+  { id: 'ecb', name: 'ECB', enabled: true, category: 'finance', priority: 142 },
+  { id: 'wto-news', name: 'WTO News', enabled: true, category: 'finance', priority: 143 },
   // Local news for Washington, DC and Alexandria
   { id: 'wtop', name: 'WTOP', enabled: true, category: 'local', priority: 83 },
   { id: 'wamu', name: 'WAMU', enabled: true, category: 'local', priority: 84 },
@@ -180,6 +261,7 @@ const DEFAULT_SETTINGS: Settings = {
     city: 'Alexandria, VA',
     useGeolocation: false,
   },
+  sourcePolicyVersion: 1,
   sources: DEFAULT_SOURCES,
   customFeeds: [],
   layout: 'compact',
@@ -211,7 +293,8 @@ export function loadSettings(): Settings {
         ...parsed,
         location: { ...DEFAULT_SETTINGS.location, ...parsed.location },
         paneSizes: { ...DEFAULT_SETTINGS.paneSizes, ...parsed.paneSizes },
-        sources: mergeSourceConfigs(DEFAULT_SOURCES, parsed.sources || []),
+        sources: mergeSourceConfigs(DEFAULT_SOURCES, parsed.sources || [], (parsed.sourcePolicyVersion || 0) < 1),
+        sourcePolicyVersion: 1,
       };
     }
   } catch (err) {
@@ -228,12 +311,12 @@ export function saveSettings(settings: Settings): void {
   }
 }
 
-function mergeSourceConfigs(defaults: SourceConfig[], stored: SourceConfig[]): SourceConfig[] {
+export function mergeSourceConfigs(defaults: SourceConfig[], stored: SourceConfig[], applySourceAudit = false): SourceConfig[] {
   const storedMap = new Map(stored.map(s => [s.id, s]));
   return defaults.map(def => {
     const existing = storedMap.get(def.id);
     if (existing) {
-      return { ...def, enabled: existing.enabled, priority: existing.priority };
+      return { ...def, enabled: applySourceAudit && !def.enabled ? false : existing.enabled, priority: existing.priority };
     }
     return def;
   });

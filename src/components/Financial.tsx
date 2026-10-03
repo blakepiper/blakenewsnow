@@ -7,6 +7,10 @@ interface MarketData {
   price: number;
   change: number;
   changePercent: number;
+  quoteSymbol?: string;
+  asOf?: string | null;
+  fetchedAt?: string;
+  currency?: string;
 }
 
 interface MarketsResponse {
@@ -40,11 +44,12 @@ function MarketItem({ item, href }: { item: MarketData; href?: string }) {
   return (
     <Tag
       {...(href ? { href, target: '_blank', rel: 'noopener noreferrer' } : {})}
+      title={`${item.name} · ${item.currency || 'USD'}${item.asOf ? `\nQuote: ${new Date(item.asOf).toLocaleString()}` : '\nQuote time unavailable'}${item.fetchedAt ? `\nRetrieved: ${new Date(item.fetchedAt).toLocaleString()}` : ''}`}
       className="flex items-center justify-between text-[11px] md:text-[10px] leading-tight py-1.5 md:py-1 px-1 -mx-1 rounded hover:bg-white/5 active:bg-white/10 transition-colors"
     >
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-white/90 font-medium shrink-0">{item.symbol}</span>
-        <span className="text-white/40 truncate">{item.name}</span>
+        <div className="min-w-0 text-white/40"><span className="block truncate">{item.name}</span><span className="block text-[9px]">{item.asOf ? new Date(item.asOf).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Quote time unavailable'}</span></div>
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-2">
         <span className="text-white/60 tabular-nums">{formatPrice(item.price)}</span>
@@ -66,11 +71,12 @@ function MacroItem({ item }: { item: MacroData }) {
       href={item.url}
       target="_blank"
       rel="noopener noreferrer"
+      title={`${item.name} · ${item.unit}\nObservation: ${item.date}\nChange since previous observation: ${item.change ?? 'unavailable'} ${item.unit}`}
       className="flex items-center justify-between text-[11px] md:text-[10px] leading-tight py-1.5 md:py-1 px-1 -mx-1 rounded hover:bg-white/5 transition-colors"
     >
-      <span className="text-white/70 truncate">{item.name}</span>
+      <span className="text-white/70 truncate">{item.name}<span className="block text-white/40 text-[9px]">{item.date}</span></span>
       <span className="flex items-center gap-2 shrink-0 ml-2 tabular-nums">
-        <span className="text-white/80">{item.value.toFixed(item.id === 'CPIAUCSL' ? 1 : 2)}{item.unit === '%' ? '%' : ''}</span>
+        <span className="text-white/80">{item.value.toFixed(item.unit === 'index' ? 1 : 2)}{item.unit === '%' ? '%' : <span className="text-white/40 text-[9px]"> {item.unit}</span>}</span>
         {change != null && <span className={changeColor}>{change > 0 ? '+' : ''}{change.toFixed(2)}</span>}
       </span>
     </a>
@@ -148,7 +154,7 @@ export function Financial() {
                   <MarketItem
                     key={item.symbol}
                     item={item}
-                    href={`https://finance.yahoo.com/quote/${encodeURIComponent(item.symbol === 'SPX' ? '^GSPC' : item.symbol === 'DJI' ? '^DJI' : item.symbol === 'IXIC' ? '^IXIC' : '^' + item.symbol)}`}
+                    href={`https://finance.yahoo.com/quote/${encodeURIComponent(item.quoteSymbol || item.symbol)}`}
                   />
                 ))}
               </div>
@@ -171,7 +177,7 @@ export function Financial() {
             {/* Movers */}
             {movers.length > 0 && (
               <div>
-                <div className="text-[10px] font-medium uppercase tracking-wide text-white/40 mb-0.5">Movers</div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-white/40 mb-0.5">Watchlist movement</div>
                 {movers.map((item) => (
                   <MarketItem
                     key={item.symbol}

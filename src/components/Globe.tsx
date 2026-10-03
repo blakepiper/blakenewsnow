@@ -9,16 +9,13 @@ import {
 const GLOBE_SIZE = 154;
 const ROTATION_DURATION = 1_000;
 
-interface TextureData {
-  pixels: Uint8ClampedArray;
-  width: number;
-  height: number;
-}
-
-let texturePromise: Promise<TextureData> | null = null;
+let texturePromise: Promise<HTMLImageElement> | null = null;
 
 const CITIES = [
   { name: 'Washington, DC', lat: 38.9, lon: -77, timeZone: 'America/New_York' },
+  { name: 'Los Angeles', lat: 34.05, lon: -118.24, timeZone: 'America/Los_Angeles' },
+  { name: 'Phoenix', lat: 33.45, lon: -112.07, timeZone: 'America/Phoenix' },
+  { name: 'Honolulu, Hawaii', lat: 21.31, lon: -157.86, timeZone: 'Pacific/Honolulu' },
   { name: 'London', lat: 51.5, lon: -0.1, timeZone: 'Europe/London' },
   { name: 'Beijing', lat: 39.9, lon: 116.4, timeZone: 'Asia/Shanghai' },
   { name: 'Moscow', lat: 55.8, lon: 37.6, timeZone: 'Europe/Moscow' },
@@ -38,75 +35,123 @@ function getLocalTime(timeZone: string): string {
   }).format(new Date());
 }
 
-function loadTexture(): Promise<TextureData> {
+function loadTexture(): Promise<HTMLImageElement> {
   if (texturePromise) return texturePromise;
 
-  texturePromise = new Promise((resolve, reject) => {
+  texturePromise = new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     image.decoding = 'async';
-    image.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-
-      if (!context) {
-        reject(new Error('Unable to prepare the globe texture'));
-        return;
-      }
-
-      context.drawImage(image, 0, 0);
-      resolve({
-        pixels: context.getImageData(0, 0, canvas.width, canvas.height).data,
-        width: canvas.width,
-        height: canvas.height,
-      });
-    };
+    image.onload = () => resolve(image);
     image.onerror = () => reject(new Error('Unable to load the globe texture'));
     image.src = '/textures/earth-day.jpg';
+  }).catch(error => {
+    texturePromise = null;
+    throw error;
   });
 
   return texturePromise;
 }
 
+interface TextureVertex {
+  x: number;
+  y: number;
+  u: number;
+  v: number;
+}
+
+// Map image triangles directly onto the globe. Avoid canvas pixel readback:
+// browsers with fingerprinting protection can replace getImageData with noise.
+function drawTextureTriangle(
+  context: CanvasRenderingContext2D,
+  texture: HTMLImageElement,
+  vertices: [TextureVertex, TextureVertex, TextureVertex]
+): void {
+  const [a, b, c] = vertices;
+  const width = texture.naturalWidth;
+  // Keep triangles crossing the date line on the same copy of the texture.
+  const unwrap = (u: number) => u - Math.round((u - a.u) / width) * width;
+  const bu = unwrap(b.u) - a.u;
+  const cu = unwrap(c.u) - a.u;
+  const bv = b.v - a.v;
+  const cv = c.v - a.v;
+  const determinant = bu * cv - cu * bv;
+  if (Math.abs(determinant) < 1e-8) return;
+
+  const xx = ((b.x - a.x) * cv - (c.x - a.x) * bv) / determinant;
+  const xy = ((c.x - a.x) * bu - (b.x - a.x) * cu) / determinant;
+  const yx = ((b.y - a.y) * cv - (c.y - a.y) * bv) / determinant;
+  const yy = ((c.y - a.y) * bu - (b.y - a.y) * cu) / determinant;
+
+  context.save();
+  context.beginPath();
+  // Slightly overlap clips so antialiasing cannot leave cracks in the mesh.
+  const centerX = (a.x + b.x + c.x) / 3;
+  const centerY = (a.y + b.y + c.y) / 3;
+  vertices.forEach((point, index) => {
+    const dx = point.x - centerX;
+    const dy = point.y - centerY;
+    const expansion = 0.5 / Math.hypot(dx, dy);
+    const x = point.x + dx * expansion;
+    const y = point.y + dy * expansion;
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  });
+  context.closePath();
+  context.clip();
+  context.transform(xx, yx, xy, yy, a.x - xx * a.u - xy * a.v, a.y - yx * a.u - yy * a.v);
+  context.drawImage(texture, 0, 0);
+  if (a.u + bu < 0 || a.u + cu < 0) context.drawImage(texture, -width, 0);
+  if (a.u + bu > width || a.u + cu > width) context.drawImage(texture, width, 0);
+  context.restore();
+}
+
 function renderGlobe(
   canvas: HTMLCanvasElement,
-  texture: TextureData,
+  texture: HTMLImageElement,
   center: GeoCoordinate
 ): void {
   const context = canvas.getContext('2d');
   if (!context) return;
 
-  const output = context.createImageData(GLOBE_SIZE, GLOBE_SIZE);
-  const globeRadius = GLOBE_SIZE / 2;
+  const radius = GLOBE_SIZE / 2;
+  const segments = 32;
+  const step = GLOBE_SIZE / segments;
+  const vertex = (column: number, row: number): TextureVertex => {
+    const x = column * step;
+    const y = row * step;
+    const nx = (x - radius) / radius;
+    const ny = (radius - y) / radius;
+    // Extend the edge's coordinates outside the disc, then clip to the sphere.
+    const scale = Math.max(1, Math.hypot(nx, ny) / 0.999999);
+    const coordinate = inverseOrthographic(nx / scale, ny / scale, center)!;
+    return {
+      x, y,
+      u: ((coordinate.lon + 180) / 360) * texture.naturalWidth,
+      v: ((90 - coordinate.lat) / 180) * texture.naturalHeight,
+    };
+  };
+  const grid = Array.from({ length: segments + 1 }, (_, row) =>
+    Array.from({ length: segments + 1 }, (_, column) => vertex(column, row))
+  );
 
-  for (let pixelY = 0; pixelY < GLOBE_SIZE; pixelY += 1) {
-    const normalizedY = (globeRadius - (pixelY + 0.5)) / globeRadius;
+  context.clearRect(0, 0, GLOBE_SIZE, GLOBE_SIZE);
+  context.save();
+  context.beginPath();
+  context.arc(radius, radius, radius, 0, Math.PI * 2);
+  context.clip();
 
-    for (let pixelX = 0; pixelX < GLOBE_SIZE; pixelX += 1) {
-      const normalizedX = (pixelX + 0.5 - globeRadius) / globeRadius;
-      const coordinate = inverseOrthographic(normalizedX, normalizedY, center);
-      if (!coordinate) continue;
-
-      const textureX = Math.min(
-        texture.width - 1,
-        Math.floor(((coordinate.lon + 180) / 360) * texture.width)
-      );
-      const textureY = Math.min(
-        texture.height - 1,
-        Math.floor(((90 - coordinate.lat) / 180) * texture.height)
-      );
-      const sourceIndex = (textureY * texture.width + textureX) * 4;
-      const targetIndex = (pixelY * GLOBE_SIZE + pixelX) * 4;
-
-      output.data[targetIndex] = texture.pixels[sourceIndex];
-      output.data[targetIndex + 1] = texture.pixels[sourceIndex + 1];
-      output.data[targetIndex + 2] = texture.pixels[sourceIndex + 2];
-      output.data[targetIndex + 3] = 255;
+  for (let row = 0; row < segments; row += 1) {
+    for (let column = 0; column < segments; column += 1) {
+      const a = grid[row][column];
+      const b = grid[row][column + 1];
+      const c = grid[row + 1][column];
+      const d = grid[row + 1][column + 1];
+      if (Math.hypot(a.x + step / 2 - radius, a.y + step / 2 - radius) > radius + step) continue;
+      drawTextureTriangle(context, texture, [a, b, c]);
+      drawTextureTriangle(context, texture, [b, d, c]);
     }
   }
-
-  context.putImageData(output, 0, 0);
+  context.restore();
 }
 
 export function Globe() {

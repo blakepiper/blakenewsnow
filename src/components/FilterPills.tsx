@@ -1,8 +1,7 @@
 import { Tab, Tabs } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import type { SyntheticEvent } from 'react';
 
-export type FilterType = 'all' | 'news' | 'tech' | 'social' | 'science' | 'local';
+export type FilterType = 'all' | 'news' | 'tech' | 'social' | 'science' | 'local' | 'finance';
 
 interface FilterPillsProps {
   activeFilter: FilterType;
@@ -16,6 +15,7 @@ const filters: { id: FilterType; label: string }[] = [
   { id: 'social', label: 'Social' },
   { id: 'science', label: 'Science' },
   { id: 'local', label: 'Local' },
+  { id: 'finance', label: 'Finance' },
 ];
 
 const FilterTabs = styled(Tabs)(({ theme }) => ({
@@ -56,7 +56,9 @@ export function FilterPills({ activeFilter, onFilterChange }: FilterPillsProps) 
   return (
     <FilterTabs
       value={activeFilter}
-      onChange={(_: SyntheticEvent, value: FilterType) => onFilterChange(value)}
+      onKeyDown={event => {
+        if (event.key === 'Enter') event.stopPropagation();
+      }}
       variant="scrollable"
       scrollButtons={false}
       aria-label="Filter news feed"
@@ -66,6 +68,7 @@ export function FilterPills({ activeFilter, onFilterChange }: FilterPillsProps) 
           key={filter.id}
           value={filter.id}
           label={filter.label}
+          onClick={() => onFilterChange(filter.id)}
         />
       ))}
     </FilterTabs>

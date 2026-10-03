@@ -11,6 +11,7 @@ import { UnifiedFeed } from './components/UnifiedFeed';
 import { Sidebar } from './components/Sidebar';
 import { PaneResizeHandle } from './components/PaneResizeHandle';
 import { BottomTabBar } from './components/BottomTabBar';
+import { matchesFinanceFilter } from './utils/finance';
 import { useSettings, useKeyboard } from './hooks';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
 import type { FeedItem, MobileView } from './types';
@@ -81,10 +82,23 @@ function App() {
   }));
 
   // Filtered items for keyboard nav count
-  const filteredItems = items.filter(item => {
+  const visibleItems = activeFilter === 'finance'
+    ? items.filter(item => matchesFinanceFilter(item))
+    : items;
+  const visibleBriefingItems = activeFilter === 'finance'
+    ? briefingItems.filter(item => matchesFinanceFilter(item))
+    : briefingItems;
+  const filteredItems = visibleItems.filter(item => {
+    if (activeFilter === 'finance') return true;
     if (activeFilter === 'all') return true;
     return item.sourceType === activeFilter;
   });
+
+  const handleFilterChange = useCallback((filter: FilterType) => {
+    setActiveFilter(filter);
+    setSelectedIndex(0);
+    setActiveView('feed');
+  }, []);
 
   const handleNavigateUp = useCallback(() => {
     if (showSearch || showSettings || showKeyboardHelp || previewItem) return;
@@ -130,13 +144,14 @@ function App() {
 
   const handleSection = useCallback((section: number) => {
     // Sections map to views on mobile-like behavior
-    if (section === 1) setActiveFilter('all');
-    else if (section === 2) setActiveFilter('news');
-    else if (section === 3) setActiveFilter('tech');
-    else if (section === 4) setActiveFilter('social');
-    else if (section === 5) setActiveFilter('science');
-    else if (section === 6) setActiveFilter('local');
-  }, []);
+    if (section === 1) handleFilterChange('all');
+    else if (section === 2) handleFilterChange('news');
+    else if (section === 3) handleFilterChange('tech');
+    else if (section === 4) handleFilterChange('social');
+    else if (section === 5) handleFilterChange('science');
+    else if (section === 6) handleFilterChange('local');
+    else if (section === 7) handleFilterChange('finance');
+  }, [handleFilterChange]);
 
   const handleSettings = useCallback(() => {
     setShowSettings(prev => !prev);
@@ -165,7 +180,7 @@ function App() {
       {/* Header */}
       <Header
         activeFilter={activeFilter}
-        onFilterChange={setActiveFilter}
+        onFilterChange={handleFilterChange}
         onSearchOpen={() => setShowSearch(true)}
         onHelpOpen={() => setShowKeyboardHelp(true)}
         onSettingsOpen={() => setShowSettings(true)}
@@ -177,20 +192,23 @@ function App() {
         {/* Mobile: Single view controlled by bottom tabs */}
 
         {/* Feed — always visible on desktop, shown on mobile when activeView='feed' */}
-        <div className={`flex-1 min-w-0 overflow-hidden ${activeView !== 'feed' ? 'hidden md:block' : ''}`}>
-          <UnifiedFeed
-            items={items}
-            briefingItems={briefingItems}
-            loading={loading}
-            error={error}
-            filter={activeFilter}
-            selectedIndex={selectedIndex}
-            onSelectIndex={setSelectedIndex}
-            readArticles={settings.readArticles}
-            newItemIds={newItemIds}
-            onRefresh={refresh}
-            onPreview={handlePreview}
-          />
+        <div className={`flex-1 min-w-0 overflow-hidden flex-col ${activeView !== 'feed' ? 'hidden md:flex' : 'flex'}`}>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <UnifiedFeed
+              items={visibleItems}
+              briefingItems={visibleBriefingItems}
+              loading={loading}
+              error={error}
+              filter={activeFilter === 'finance' ? 'all' : activeFilter}
+              emptyMessage={activeFilter === 'finance' ? 'No current finance stories. Enable more sources in Settings.' : undefined}
+              selectedIndex={selectedIndex}
+              onSelectIndex={setSelectedIndex}
+              readArticles={settings.readArticles}
+              newItemIds={newItemIds}
+              onRefresh={refresh}
+              onPreview={handlePreview}
+            />
+          </div>
         </div>
 
         <PaneResizeHandle
