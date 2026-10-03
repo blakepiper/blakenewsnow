@@ -10,6 +10,7 @@ const { URL } = require('url');
 const path = require('node:path');
 const fs = require('node:fs');
 const { jsonResponses } = require('./json-response.cjs');
+const { logApiRequests } = require('./request-logging.cjs');
 const { registerRoutes: registerDataRoutes } = require('./data-feeds.cjs');
 const { registerArticlePreviewRoute } = require('./article-preview.cjs');
 
@@ -28,6 +29,7 @@ if (process.env.SERVE_DIST === '1') {
   allowedOrigins.add(`http://127.0.0.1:${PORT}`);
 }
 app.disable('x-powered-by');
+app.use(logApiRequests);
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && !allowedOrigins.has(origin)) {
@@ -45,7 +47,7 @@ app.use(cors({
 }));
 app.use((_req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff');
-  res.set('Referrer-Policy', 'no-referrer');
+  res.set('Referrer-Policy', _req.path.startsWith('/api/') ? 'no-referrer' : 'strict-origin-when-cross-origin');
   res.set('X-Frame-Options', 'DENY');
   next();
 });
@@ -67,7 +69,8 @@ app.get('/api/radar/tile', (req, res) => {
   } catch {
     return res.status(400).send('Invalid radar URL');
   }
-  if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'tilecache.rainviewer.com') {
+  if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'tilecache.rainviewer.com'
+    || parsedUrl.username || parsedUrl.password || (parsedUrl.port && parsedUrl.port !== '443')) {
     return res.status(403).send('Invalid radar URL');
   }
 
@@ -81,8 +84,10 @@ app.get('/api/radar/tile', (req, res) => {
   };
 
   const proxyReq = https.request(options, (proxyRes) => {
+    const status = proxyRes.statusCode || 502;
+    res.status(status);
     res.set('Content-Type', proxyRes.headers['content-type'] || 'image/png');
-    res.set('Cache-Control', 'public, max-age=120');
+    res.set('Cache-Control', status >= 200 && status < 300 ? 'public, max-age=120' : 'no-store');
     proxyRes.pipe(res);
   });
 
@@ -121,7 +126,12 @@ if (process.env.SERVE_DIST === '1') {
   } }));
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, error => {
+  if (error) {
+    console.error(`[SERVER] Cannot listen on port ${PORT}: ${error.code || error.message}`);
+    process.exitCode = 1;
+    return;
+  }
   console.log(`[SERVER] Blake News Now API running on http://localhost:${PORT}`);
   console.log('[SERVER] Available endpoints:');
   console.log('  - /api/headlines');
@@ -144,3 +154,12 @@ app.listen(PORT, () => {
   console.log('  - /api/article-preview');
   console.log('  - /health');
 });
+
+function shutdown() {
+  console.log('[SERVER] Stopping...');
+  server.closeAllConnections();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 1000).unref();
+}
+process.once('SIGINT', shutdown);
+process.once('SIGTERM', shutdown);

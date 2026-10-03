@@ -74,6 +74,8 @@ FRONTEND_URL="${BLAKENEWSNOW_FRONTEND_URL:-http://localhost:$FRONTEND_PORT}"
 LINK_CREATED=0
 SERVICES_PID=0
 BROWSER_WAITER_PID=0
+RUN_LOCK_DIR="$ROOT_DIR/.blakenewsnow-run"
+RUN_LOCK_CREATED=0
 
 # The function is invoked indirectly by the EXIT trap.
 # shellcheck disable=SC2329
@@ -97,12 +99,46 @@ cleanup() {
     fi
   fi
 
+  if (( RUN_LOCK_CREATED == 1 )) && [[ -f "$RUN_LOCK_DIR/pid" ]] && [[ "$(<"$RUN_LOCK_DIR/pid")" == "$$" ]]; then
+    rm -f -- "$RUN_LOCK_DIR/pid"
+    rmdir -- "$RUN_LOCK_DIR" 2>/dev/null || true
+  fi
+
   exit "$status"
 }
 
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap cleanup EXIT
+
+# Claim the repository before changing its shared dependency symlink. This also
+# protects startup/build time, before the HTTP listener exists.
+if ! mkdir "$RUN_LOCK_DIR" 2>/dev/null; then
+  previous_pid=""
+  if [[ -f "$RUN_LOCK_DIR/pid" ]]; then previous_pid="$(<"$RUN_LOCK_DIR/pid")"; fi
+  if [[ "$previous_pid" =~ ^[1-9][0-9]*$ ]] && ! kill -0 "$previous_pid" 2>/dev/null; then
+    rm -f -- "$RUN_LOCK_DIR/pid"
+    rmdir -- "$RUN_LOCK_DIR" 2>/dev/null || die 'cannot clear stale launcher lock'
+    mkdir "$RUN_LOCK_DIR" || die 'another launcher is starting'
+  else
+    die "already running or starting${previous_pid:+ (PID $previous_pid)}; use Ctrl+C in its terminal to stop it"
+  fi
+fi
+RUN_LOCK_CREATED=1
+printf '%s\n' "$$" > "$RUN_LOCK_DIR/pid"
+
+# A standalone server may occupy the port without owning this launcher's lock.
+BLAKENEWSNOW_LISTEN_PORT="$FRONTEND_PORT" node -e '
+  const net = require("node:net")
+  const port = Number(process.env.BLAKENEWSNOW_LISTEN_PORT)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) process.exit(1)
+  const probe = net.createServer()
+  probe.once("error", error => {
+    console.error(`blakenewsnow: cannot use port ${port}: ${error.code}; stop the existing server first`)
+    process.exitCode = 1
+  })
+  probe.listen(port, () => probe.close())
+'
 
 STATE="$(
   printf 'node=%s\n' "$(node --version)"
@@ -245,6 +281,7 @@ else
   SERVE_DIST=1 PORT="${PORT:-3000}" node server/proxy.cjs &
 fi
 SERVICES_PID=$!
+echo "blakenewsnow: running at $FRONTEND_URL — press Ctrl+C to stop"
 
 if [[ "${BLAKENEWSNOW_OPEN_BROWSER:-1}" != 0 ]]; then
   open_browser_when_ready &

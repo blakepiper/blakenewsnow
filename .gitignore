@@ -40,3 +40,6 @@ dist-ssr
 
 # Validated local feed snapshots
 .blakenewsnow-cache/
+
+# Launcher ownership lock
+.blakenewsnow-run/

@@ -61,7 +61,9 @@ The launcher keeps an incremental project-local environment in
 `.blakenewsnow-venv/`. It installs dependencies there on first use, updates
 that environment when the manifest or lockfile changes, and serves the production
 frontend and API from one Node process. It builds only when frontend inputs change
-and stops when interrupted with Ctrl+C. Once the frontend is ready,
+and stays attached to your terminal, logging API requests. Press Ctrl+C to stop it.
+A second launch reports an existing instance or occupied port instead of attaching
+to a server from another terminal. Once the frontend is ready,
 it opens `http://localhost:3000` in the default browser; set
 `BLAKENEWSNOW_OPEN_BROWSER=0` to disable that behavior.
 

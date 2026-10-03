@@ -182,6 +182,8 @@ export function Weather({ zip = '22314' }: WeatherProps) {
           loaded++;
           finishBase();
         };
+        // OSM requires the page's origin even when an embedding host strips referrers.
+        img.referrerPolicy = 'origin';
         img.src = `https://tile.openstreetmap.org/${ZOOM}/${tx}/${ty}.png`;
       }
     }
